@@ -13,6 +13,16 @@ static func draw_fighter(f: Fighter) -> void:
 	# 詠唱陣
 	if f.state == "cast":
 		_magic_circle(f, f.cast_t, f.cast_time)
+	# オーバーリミッツ中の金色のオーラ
+	if f.is_player and f.battle.ovl_t > 0.0 and not f.dead:
+		var B0: float = f.body.y
+		for i in range(3):
+			var rr = B0 * (0.55 + i * 0.12) + sin(f.anim_t * 10.0 + i) * 4.0
+			f.draw_circle(Vector2(0, -B0 * 0.5), rr, Color(1.0, 0.8, 0.3, 0.12 * a))
+		for i in range(5):
+			var px = sin(f.anim_t * 3.0 + i * 1.7) * f.body.x * 0.6
+			var py = -fmod(f.anim_t * 120.0 + i * 37.0, B0 * 1.2)
+			f.draw_circle(Vector2(px, py), 3.0, Color(1.0, 0.9, 0.5, 0.8 * a))
 	f.draw_set_transform(Vector2.ZERO, 0.0, Vector2(f.facing, 1))
 	if f.team == 0:
 		_draw_hero(f, a)
@@ -176,6 +186,10 @@ static func _draw_hero(f: Fighter, a: float) -> void:
 	# 頭
 	var hc = torso_top + Vector2(lean * 10.0, -16)
 	var hr = 15.0
+	if f.cid == "angie":
+		# 背中に流れる長い髪（頭より奥）
+		var sway = sin(f.anim_t * 5.0) * 2.5
+		UI.poly(f, PackedVector2Array([hc + Vector2(4, -hr), hc + Vector2(-hr - 4, -8), hc + Vector2(-hr - 9, 14), hc + Vector2(-hr - 8 + sway, 36), hc + Vector2(-hr - 2 + sway, 44), hc + Vector2(-hr + 2 + sway, 36), hc + Vector2(-4, 40), hc + Vector2(0, 20), hc + Vector2(6, 6)]), hair.darkened(0.15))
 	f.draw_circle(hc, hr, skin)
 	f.draw_circle(hc + Vector2(-2, -5), hr - 2, hair)
 	f.draw_circle(hc + Vector2(5, 2), hr - 6, skin)
@@ -185,7 +199,6 @@ static func _draw_hero(f: Fighter, a: float) -> void:
 			var hat = _tint(Color(0.35, 0.18, 0.45), f, a)
 			UI.poly(f, PackedVector2Array([hc + Vector2(-24, -8), hc + Vector2(24, -8), hc + Vector2(10, -16), hc + Vector2(-10, -16)]), hat)
 			UI.poly(f, PackedVector2Array([hc + Vector2(-10, -15), hc + Vector2(10, -15), hc + Vector2(-14, -44)]), hat)
-			UI.poly(f, PackedVector2Array([hc + Vector2(-hr, -2), hc + Vector2(-hr - 6, 26), hc + Vector2(-hr + 8, 20)]), hair)
 		"sona":
 			f.draw_rect(Rect2(hc + Vector2(-hr, -10), Vector2(hr * 2, 5)), _tint(Color(0.3, 0.25, 0.2), f, a))
 			f.draw_circle(hc + Vector2(6, -8), 4.5, _tint(Color(0.4, 0.85, 0.9), f, a))

@@ -54,6 +54,12 @@ var invul := 0.0
 var armor := 0.0
 var armor_max := 0.0
 var armor_regen_t := 0.0
+var break_t := 0.0       # ブレイク中の残り時間。終わると装甲が全快する
+var resist_t := 0.0      # のけぞらない時間（ブレイク明け・連続被弾の後）
+var stun_chain := 0.0    # 敵がのけぞり続けている時間
+var stun_free_t := 0.0
+const STUN_LIMIT := 3.5
+const BREAK_TIME := 3.5
 var flash_t := 0.0
 var guard_t := 0.0
 var guard_pressed_at := -10.0
@@ -212,10 +218,23 @@ func tick(dt: float) -> void:
 		buffs[k][1] -= dt
 		if buffs[k][1] <= 0:
 			buffs.erase(k)
-	if armor_max > 0.0 and armor < armor_max:
+	if break_t > 0.0:
+		break_t -= dt
+		if break_t <= 0.0 and not dead:
+			_recover_from_break()
+	elif armor_max > 0.0 and armor < armor_max:
 		armor_regen_t -= dt
 		if armor_regen_t <= 0.0:
 			armor = min(armor_max, armor + armor_max * dt * 0.5)
+	resist_t = max(0.0, resist_t - dt)
+	if team == 1:
+		if state == "hit" and break_t <= 0.0:
+			stun_chain += dt
+			stun_free_t = 0.0
+		else:
+			stun_free_t += dt
+			if stun_free_t > 1.2:
+				stun_chain = 0.0
 	if team == 0 and not dead:
 		var regen = 0.6
 		if skills.has("tp_regen"):
@@ -408,6 +427,8 @@ func use_slot(slot: int) -> bool:
 
 
 func arte_cost(aid: String) -> float:
+	if is_player and battle.ovl_t > 0.0:
+		return 0.0  # オーバーリミッツ中はTPを消費しない
 	var a: Dictionary = DB.arte(aid)
 	return ceil(a["tp"] * Game.bmod("tp_cost_mult"))
 
@@ -633,15 +654,33 @@ func take_hit(dmg: int, knock: float, launch: float, from_dir: int, stun: float,
 	if hp <= 0.0:
 		die(from_dir)
 		return
-	if armor_max > 0.0 and armor > 0.0:
+	if is_player and battle.ovl_t > 0.0:
+		return  # オーバーリミッツ中はのけぞらない
+	if armor_max > 0.0 and break_t <= 0.0:
 		armor -= dmg * 0.6 + 6
 		armor_regen_t = 3.5
+		if resist_t > 0.0:
+			# ブレイク明けの立て直し中は割れない
+			armor = max(armor, 1.0)
 		if armor <= 0.0:
 			armor = 0.0
-			armor_regen_t = 5.0
+			break_t = BREAK_TIME
+			stun_chain = 0.0
 			battle.on_break(self)
 			_stagger(1.6, from_dir, 200)
 		return
+	if team == 1 and break_t <= 0.0:
+		if resist_t > 0.0:
+			return
+		if stun_chain > STUN_LIMIT:
+			# のけぞり続けた敵は踏ん張って抜け出す（無限コンボ防止）
+			stun_chain = 0.0
+			resist_t = 1.6
+			hitstun = 0.0
+			battle.popup_text(head(), "踏ん張り！", Color(1.0, 0.75, 0.4), 18)
+			if on_ground_or_flyer() and state == "hit":
+				set_state("idle")
+			return
 	if state == "cast" and skills.has("iron_cast"):
 		return
 	if state == "cast":
@@ -657,6 +696,17 @@ func take_hit(dmg: int, knock: float, launch: float, from_dir: int, stun: float,
 		vy = max(vy, 120.0)
 	hitstun = (0.28 + knock / 900.0) * stun
 	set_state("hit")
+
+
+func _recover_from_break() -> void:
+	armor = armor_max
+	resist_t = 3.0
+	stun_chain = 0.0
+	hitstun = 0.0
+	if state == "hit" and on_ground_or_flyer():
+		set_state("idle")
+	battle.popup_text(head() + Vector2(0, -30), "装甲回復", Color(0.9, 0.9, 0.6), 22)
+	ai_t = 0.0
 
 
 func _stagger(t: float, from_dir: int, knock: float) -> void:

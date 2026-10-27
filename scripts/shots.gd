@@ -88,4 +88,30 @@ func _run() -> void:
 	main.screen.try_link()
 	await get_tree().create_timer(2.2).timeout
 	await shot("12_zettai")
+	await get_tree().create_timer(3.0).timeout
+	# オーバーリミッツと3人の合体秘奥義
+	var b = main.screen
+	b.ovl = 100.0
+	Game.flags["mystic_gauge"] = 300.0
+	b.start_ovl()
+	await get_tree().create_timer(0.8).timeout
+	await shot("14_ovl")
+	b.fire_mystic()
+	await get_tree().create_timer(1.2).timeout
+	await shot("15_mystic_cutin")
+	await get_tree().create_timer(1.8).timeout
+	await shot("16_mystic_name")
+	await get_tree().create_timer(1.6).timeout
+	await shot("17_mystic_hit")
+	# マップのスキット呼び出し
+	main.busy = false
+	Game.floor_num = 1
+	Game.flags["floor_started_1"] = true
+	Game.flags["red_cape"] = false
+	Game.flags["nine_absent"] = false
+	Game.gen_map()
+	Game.pending_skits = ["s_first_step"]
+	main.goto("map", {})
+	await get_tree().create_timer(1.2).timeout
+	await shot("18_map_skit")
 	get_tree().quit()

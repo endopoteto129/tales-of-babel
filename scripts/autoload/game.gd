@@ -3,6 +3,7 @@ extends Node
 
 signal notified(text: String, kind: String)
 signal skit_available(skit_id: String)
+signal input_mode_changed  # キーボード操作とゲームパッド操作が切り替わった
 
 const SAVE_PATH := "user://save.json"
 const MAX_ROW := 8
@@ -24,6 +25,7 @@ var floor_snapshot: Dictionary = {}
 var play_time := 0.0
 
 var rng := RandomNumberGenerator.new()
+var pad_mode := false  # 最後の入力がゲームパッドなら true（ボタン表示を切り替える）
 var quiet := false  # true の間は通知（トースト）を出さない（デバッグジャンプ用）
 
 # 通常プレイでの想定レベル（層の開始時 / ボス戦時）。バランス確認とデバッグジャンプで使う
@@ -34,6 +36,52 @@ const EXPECTED_LV_BOSS := [3, 5, 8, 10, 13, 15, 17]
 func _ready() -> void:
 	rng.randomize()
 	_setup_input()
+	pad_mode = Input.get_connected_joypads().size() > 0
+
+
+func _input(event: InputEvent) -> void:
+	var pad = event is InputEventJoypadButton or (event is InputEventJoypadMotion and abs(event.axis_value) > 0.5)
+	var kb = event is InputEventKey or event is InputEventMouseButton
+	if pad and not pad_mode:
+		pad_mode = true
+		input_mode_changed.emit()
+	elif kb and pad_mode:
+		pad_mode = false
+		input_mode_changed.emit()
+
+
+# 操作ボタンの表示名。今の入力方法（キーボード／ゲームパッド）に合わせて返す
+const KEY_NAMES := {
+	"attack": ["J", "X"], "arte": ["K", "B"], "jump": ["Space", "A"], "guard": ["L", "LB"],
+	"target": ["Tab", "RB"], "link": ["U", "RT"], "overlimit": ["I", "Y"], "pause": ["Esc", "START"],
+	"skit": ["T", "BACK"], "menu": ["M", "START"], "accept": ["Enter", "A"], "cancel": ["Esc", "B"],
+	"allies": ["1/2/3", "右スティック"], "move": ["←→", "左スティック"], "dir": ["↑↓←→", "十字キー"],
+}
+
+
+func key(action: String) -> String:
+	var names: Array = KEY_NAMES.get(action, [action, action])
+	return names[1] if pad_mode else names[0]
+
+
+# 操作説明（今の入力方法に合わせる）。battle_only なら戦闘部分だけ
+func controls_text(battle_only: bool = false) -> String:
+	var t := ""
+	if pad_mode:
+		t = "[b]バトル（ゲームパッド）[/b]\n移動：左スティック／十字キー　通常攻撃：X\n術技：B（＋方向なしで1種、十字キー↑/↓/←→で計4種）\nジャンプ：A　ガード：LB／LT（ガード中に左右でステップ）\nターゲット切替：RB　共鳴秘技：RT（絆ゲージ満タン時）\nオーバーリミッツ：Y（OVLゲージ満タン時）\n秘奥義：オーバーリミッツ中に Y（秘奥義ゲージ100%以上）\n仲間に術技を指示：右スティック ←↑→　メニュー：START"
+		if not battle_only:
+			t += "\n\n[b]マップ[/b]\n左右でルート選択、A で進む。スキット：BACK　メニュー：START"
+	else:
+		t = "[b]バトル（キーボード）[/b]\n移動：A/D・←→　通常攻撃：J（Z）\n術技：K（X）＋方向なし/↑/↓/←→で4種\nジャンプ：Space（C）　ガード：L（Shift）　ガード中に←→でステップ\nターゲット切替：Tab（Q）　共鳴秘技：U（V）（絆ゲージ満タン時）\nオーバーリミッツ：I（B）（OVLゲージ満タン時）\n秘奥義：オーバーリミッツ中に I（秘奥義ゲージ100%以上）\n仲間に術技を指示：1/2/3　メニュー：Esc"
+		if not battle_only:
+			t += "\n\n[b]マップ[/b]\n←→でルート選択、Enter で進む。スキット：T　メニュー：M"
+	t += "\n\n[b]テイルズ流のコツ[/b]\n通常攻撃 → 特技 → 奥義 の順にキャンセルして繋げよう。\n仲間と同じ敵を叩くと「連携」で絆ゲージが一気にたまる。\n秘奥義ゲージは戦闘をまたいで300%までたまる。200%で2人、300%で3人の合体秘奥義になる。"
+	return t
+
+
+# [ボタン名] の形で返す
+func btn(action: String) -> String:
+	return "[%s]" % key(action)
 
 
 func _process(delta: float) -> void:
@@ -44,7 +92,7 @@ func _process(delta: float) -> void:
 func _setup_input() -> void:
 	# キーボードとゲームパッド（Xbox配置。PlayStation等は同じ位置のボタン）
 	# 移動: 左スティック/十字キー  攻撃: X(□)  術技: B(○)  ジャンプ: A(×)  ガード: LB/LT(L1/L2)
-	# ターゲット: RB(R1)  共鳴秘技: Y(△)  ポーズ: START  スキット: BACK  仲間への指示: 右スティック ←↑→
+	# ターゲット: RB(R1)  共鳴秘技: RT(R2)  オーバーリミッツ／秘奥義: Y(△)  ポーズ: START  スキット: BACK  仲間への指示: 右スティック ←↑→
 	_bind("move_left", [KEY_A, KEY_LEFT], [JOY_BUTTON_DPAD_LEFT], [[JOY_AXIS_LEFT_X, -1.0]])
 	_bind("move_right", [KEY_D, KEY_RIGHT], [JOY_BUTTON_DPAD_RIGHT], [[JOY_AXIS_LEFT_X, 1.0]])
 	_bind("move_up", [KEY_W, KEY_UP], [JOY_BUTTON_DPAD_UP], [[JOY_AXIS_LEFT_Y, -1.0]])
@@ -53,7 +101,8 @@ func _setup_input() -> void:
 	_bind("arte", [KEY_K, KEY_X], [JOY_BUTTON_B])
 	_bind("jump", [KEY_SPACE, KEY_C], [JOY_BUTTON_A])
 	_bind("guard", [KEY_L, KEY_SHIFT], [JOY_BUTTON_LEFT_SHOULDER], [[JOY_AXIS_TRIGGER_LEFT, 1.0]])
-	_bind("link", [KEY_U, KEY_V], [JOY_BUTTON_Y], [[JOY_AXIS_TRIGGER_RIGHT, 1.0]])
+	_bind("link", [KEY_U, KEY_V], [], [[JOY_AXIS_TRIGGER_RIGHT, 1.0]])
+	_bind("overlimit", [KEY_I, KEY_B], [JOY_BUTTON_Y])
 	_bind("target", [KEY_TAB, KEY_Q], [JOY_BUTTON_RIGHT_SHOULDER])
 	_bind("pause", [KEY_ESCAPE, KEY_P], [JOY_BUTTON_START])
 	_bind("skit", [KEY_T], [JOY_BUTTON_BACK])

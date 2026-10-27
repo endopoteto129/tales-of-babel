@@ -155,3 +155,15 @@ static func poly(ci: CanvasItem, pts: PackedVector2Array, col: Color) -> void:
 			ci.draw_colored_polygon(hull, col)
 		return
 	ci.draw_colored_polygon(pts, col)
+
+
+# 操作ボタンの表示を含む文字列を、入力方法が切り替わるたびに作り直す
+static func live_text(node: Control, make: Callable) -> void:
+	node.text = make.call()
+	var cb = func() -> void:
+		if is_instance_valid(node):
+			node.text = make.call()
+	Game.input_mode_changed.connect(cb)
+	node.tree_exiting.connect(func() -> void:
+		if Game.input_mode_changed.is_connected(cb):
+			Game.input_mode_changed.disconnect(cb))

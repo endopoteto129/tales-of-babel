@@ -35,7 +35,9 @@ func _ready() -> void:
 		tabs_box.add_child(UI.button(TABS[i], func() -> void:
 			tab = idx
 			_rebuild(), 20))
-	tabs_box.add_child(UI.button("閉じる [Esc]", _close, 20))
+	var close_btn = UI.button("", _close, 20)
+	UI.live_text(close_btn, func() -> String: return "閉じる " + Game.btn("pause"))
+	tabs_box.add_child(close_btn)
 	char_bar = HBoxContainer.new()
 	char_bar.position = Vector2(240, 24)
 	char_bar.add_theme_constant_override("separation", 8)
@@ -146,7 +148,7 @@ func _artes() -> void:
 	content.add_child(v)
 	v.add_child(UI.label("術技セット（バトル中：K / ↑+K / ↓+K / ←→+K）", 20, UI.C_GOLD, true))
 	if cid != "ren":
-		v.add_child(UI.label("※仲間は自動で術技を使う。セットした順に優先され、1/2/3キーで1番目を指示できる。", 15, UI.C_DIM))
+		v.add_child(UI.label("※仲間は自動で術技を使う。セットした順に優先され、戦闘中に%sで1番目を指示できる。" % Game.key("allies"), 15, UI.C_DIM))
 	var hb = HBoxContainer.new()
 	hb.add_theme_constant_override("separation", 8)
 	v.add_child(hb)

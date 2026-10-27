@@ -87,14 +87,17 @@ func _draw() -> void:
 	# 画面フラッシュ
 	if battle.flash_col.a > 0.0:
 		draw_rect(Rect2(Vector2.ZERO, Vector2(1280, 720)), battle.flash_col)
+	if battle.ovl_t > 0.0:
+		_draw_ovl_frame()
 	_draw_party()
 	_draw_enemies()
 	_draw_link()
+	_draw_ovl_gauges()
 	_draw_buffs()
 	if battle.started and not battle.ended:
-		var hint = "J:攻撃  K(+↑↓→):術技  Space:ジャンプ  L:ガード  Tab:ターゲット  U:共鳴秘技  Esc:メニュー"
-		if Input.get_connected_joypads().size() > 0:
-			hint = "X(□):攻撃  B(○)+方向:術技  A(×):ジャンプ  LB/LT:ガード  RB:ターゲット  Y/RT:共鳴秘技  右スティック:仲間に指示  START:メニュー"
+		var hint = "J:攻撃  K(+↑↓→):術技  Space:ジャンプ  L:ガード  Tab:ターゲット  U:共鳴秘技  I:オーバーリミッツ  Esc:メニュー"
+		if Game.pad_mode:
+			hint = "X:攻撃  B(+方向):術技  A:ジャンプ  LB/LT:ガード  RB:ターゲット  RT:共鳴秘技  Y:オーバーリミッツ  右スティック:仲間に指示  START:メニュー"
 		draw_string(UI.FONT, Vector2(12, 612), hint, HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color(1, 1, 1, 0.55))
 
 
@@ -137,7 +140,9 @@ func _draw_enemies() -> void:
 			var p: Vector2 = e.head() + battle.world.position + Vector2(-30, -6)
 			draw_rect(Rect2(p, Vector2(60, 6)), Color(0, 0, 0, 0.6))
 			draw_rect(Rect2(p, Vector2(60 * e.hp_ratio(), 6)), Color(1.0, 0.35, 0.3))
-			if e.armor_max > 0:
+			if e.break_t > 0.0:
+				draw_rect(Rect2(p + Vector2(0, 7), Vector2(60 * e.break_t / e.BREAK_TIME, 3)), Color(1.0, 0.5, 0.2))
+			elif e.armor_max > 0:
 				draw_rect(Rect2(p + Vector2(0, 7), Vector2(60 * e.armor / e.armor_max, 3)), Color(0.9, 0.9, 0.6))
 	if boss:
 		var r = Rect2(240, 40, 800, 22)
@@ -145,7 +150,10 @@ func _draw_enemies() -> void:
 		draw_rect(Rect2(r.position - Vector2(3, 3), r.size + Vector2(6, 6)), Color(0, 0, 0, 0.7))
 		draw_rect(Rect2(r.position, Vector2(r.size.x * boss.hp_ratio(), r.size.y)), Color(0.85, 0.15, 0.2))
 		draw_rect(Rect2(r.position, Vector2(r.size.x * boss.hp_ratio(), 6)), Color(1, 0.5, 0.5, 0.6))
-		if boss.armor_max > 0:
+		if boss.break_t > 0.0:
+			draw_rect(Rect2(r.position + Vector2(0, 26), Vector2(r.size.x * boss.break_t / boss.BREAK_TIME, 5)), Color(1.0, 0.5, 0.2))
+			draw_string(UI.FONT_BOLD, Vector2(1046, 72), "BREAK", HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color(1, 0.6, 0.3))
+		elif boss.armor_max > 0:
 			draw_rect(Rect2(r.position + Vector2(0, 26), Vector2(r.size.x * boss.armor / boss.armor_max, 5)), Color(1.0, 0.9, 0.5))
 			draw_string(UI.FONT, Vector2(1046, 72), "装甲", HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color(1, 0.9, 0.5))
 	# ターゲット表示
@@ -168,9 +176,60 @@ func _draw_link() -> void:
 	if k >= 1.0:
 		var pulse = 0.6 + sin(t * 8.0) * 0.4
 		draw_circle(p, r - 6, Color(1.0, 0.6, 0.8, 0.35 * pulse))
-		draw_string(UI.FONT_BOLD, p + Vector2(-80, -48), "共鳴秘技 [U]", HORIZONTAL_ALIGNMENT_CENTER, 160, 18, Color(1, 0.75, 0.9, pulse))
+		draw_string(UI.FONT_BOLD, p + Vector2(-112, -48), "共鳴秘技 " + Game.btn("link"), HORIZONTAL_ALIGNMENT_CENTER, 160, 18, Color(1, 0.75, 0.9, pulse))
 	draw_string(UI.FONT_BOLD, p + Vector2(-20, 6), "絆", HORIZONTAL_ALIGNMENT_CENTER, 40, 22, Color.WHITE)
 	draw_string(UI.FONT, p + Vector2(-30, 52), "%d%%" % int(battle.link), HORIZONTAL_ALIGNMENT_CENTER, 60, 14, Color(1, 0.85, 0.9))
+
+
+# オーバーリミッツ中は画面の縁を金色に光らせる
+func _draw_ovl_frame() -> void:
+	var pulse = 0.5 + sin(t * 7.0) * 0.2
+	var c = Color(1.0, 0.8, 0.3, 0.35 * pulse)
+	for i in range(6):
+		var w = 4.0 + i * 5.0
+		var a = c * Color(1, 1, 1, 1.0 - i / 6.0)
+		draw_rect(Rect2(0, 0, 1280, w), a)
+		draw_rect(Rect2(0, 720 - w, 1280, w), a)
+		draw_rect(Rect2(0, 0, w, 720), a)
+		draw_rect(Rect2(1280 - w, 0, w, 720), a)
+
+
+# 絆ゲージの右にオーバーリミッツと秘奥義のゲージ
+func _draw_ovl_gauges() -> void:
+	var x = 1132.0
+	var w = 136.0
+	var pulse = 0.6 + sin(t * 8.0) * 0.4
+	# オーバーリミッツ
+	var oy = 516.0
+	draw_rect(Rect2(x - 6, oy - 22, w + 12, 108), Color(0, 0, 0, 0.55))
+	if battle.ovl_t > 0.0:
+		draw_string(UI.FONT_BOLD, Vector2(x, oy - 4), "OVER LIMIT", HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color(1.0, 0.85, 0.35, pulse))
+		UI.bar(self, Rect2(x, oy + 2, w, 9), battle.ovl_t / battle.OVL_TIME, Color(1.0, 0.85, 0.35))
+	else:
+		var full = battle.ovl >= 100.0
+		var lbl = "OVL " + Game.btn("overlimit") if full else "OVL"
+		draw_string(UI.FONT_BOLD, Vector2(x, oy - 4), lbl, HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color(1.0, 0.85, 0.4, pulse) if full else Color(0.9, 0.85, 0.7))
+		UI.bar(self, Rect2(x, oy + 2, w, 9), battle.ovl / 100.0, Color(1.0, 0.75, 0.3) if full else Color(0.8, 0.65, 0.35))
+	# 秘奥義（100%ごとに区切った3段のゲージ）
+	var my = 552.0
+	var g: float = battle.mystic_gauge()
+	var ready = battle.ovl_t > 0.0 and g >= 100.0
+	var lbl2 = "秘奥義 %d%%" % int(g)
+	if ready:
+		lbl2 = "秘奥義 " + Game.btn("overlimit")
+	draw_string(UI.FONT_BOLD, Vector2(x, my - 4), lbl2, HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color(1.0, 0.45, 0.4, pulse) if ready else Color(1.0, 0.75, 0.7))
+	var seg_cols = [Color(1.0, 0.45, 0.35), Color(1.0, 0.65, 0.2), Color(1.0, 0.95, 0.4)]
+	var sw = (w - 8) / 3.0
+	for i in range(3):
+		var r = Rect2(x + i * (sw + 4), my + 2, sw, 10)
+		draw_rect(r, Color(0, 0, 0, 0.6))
+		var k: float = clamp((g - i * 100.0) / 100.0, 0.0, 1.0)
+		draw_rect(Rect2(r.position, Vector2(sw * k, 10)), seg_cols[i])
+	var who = "単独" if g < 200.0 else ("2人" if g < 300.0 else "3人")
+	if g >= 100.0:
+		draw_string(UI.FONT, Vector2(x, my + 30), who + "の秘奥義", HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color(1, 0.85, 0.8))
+	if g >= 100.0 and battle.ovl_t <= 0.0:
+		draw_string(UI.FONT, Vector2(x, my + 46), "OVL中に使える", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, UI.C_DIM)
 
 
 func _draw_buffs() -> void:
@@ -306,6 +365,117 @@ func play_link_cutin(a: String, b: String, ld: Dictionary) -> void:
 	await get_tree().create_timer(0.1).timeout
 
 
+# 秘奥義のカットイン。参加者が順に現れ、最後に技名を大きく出す
+func play_mystic_cutin(md: Dictionary) -> void:
+	var members: Array = md["members"]
+	var lines: Dictionary = md["lines"]
+	var col: Color = md.get("color", Color(1, 0.4, 0.3))
+	var root = Control.new()
+	UI.full(root)
+	add_child(root)
+	var dim = ColorRect.new()
+	dim.color = Color(0, 0, 0, 0.0)
+	UI.full(dim)
+	root.add_child(dim)
+	var rays = MysticRays.new()
+	rays.col = col
+	UI.full(rays)
+	rays.modulate.a = 0.0
+	root.add_child(rays)
+	var tw0 = create_tween().set_parallel()
+	tw0.tween_property(dim, "color:a", 0.88, 0.25)
+	tw0.tween_property(rays, "modulate:a", 1.0, 0.4)
+	# 上下の黒帯
+	var bars: Array = []
+	for i in range(2):
+		var bar = ColorRect.new()
+		bar.color = Color.BLACK
+		bar.size = Vector2(1280, 70)
+		bar.position = Vector2(0, -70 if i == 0 else 720)
+		root.add_child(bar)
+		bars.append(bar)
+		create_tween().tween_property(bar, "position:y", 0.0 if i == 0 else 650.0, 0.3)
+	var head = UI.outlined(UI.label("秘奥義", 30, Color(1.0, 0.9, 0.6), true), 6)
+	head.position = Vector2(40, 18)
+	root.add_child(head)
+	var n = members.size()
+	var band_h = 170.0 if n > 1 else 220.0
+	var top = 360.0 - (n * band_h + (n - 1) * 14.0) / 2.0
+	for i in range(n):
+		var cid: String = members[i]
+		var from_left = i % 2 == 0
+		var band = ColorRect.new()
+		band.color = DB.ccolor(cid).darkened(0.35)
+		band.color.a = 0.92
+		band.size = Vector2(1500, band_h)
+		band.position = Vector2(-1500 if from_left else 1400, top + i * (band_h + 14.0))
+		band.rotation = -0.05
+		band.clip_contents = true
+		root.add_child(band)
+		var edge = ColorRect.new()
+		edge.color = col.lightened(0.4)
+		edge.size = Vector2(1500, 5)
+		band.add_child(edge)
+		var por = Portrait.new()
+		por.size = Vector2(band_h * 1.15, band_h * 1.6)
+		por.position = Vector2(150 if from_left else 1050, band_h - band_h * 1.6 + 30)
+		por.setup(cid, "serious" if cid != "nine" else "smile", not from_left)
+		band.add_child(por)
+		var l = UI.outlined(UI.label(lines.get(cid, ""), 32, Color.WHITE, true), 7)
+		l.position = Vector2(460 if from_left else 260, band_h / 2.0 - 26)
+		band.add_child(l)
+		var tw = create_tween()
+		tw.tween_property(band, "position:x", -110.0, 0.22).set_trans(Tween.TRANS_QUART).set_ease(Tween.EASE_OUT)
+		Sfx.play("slash", 0.6 + i * 0.12)
+		battle.flash(Color(col.r, col.g, col.b, 0.3))
+		await get_tree().create_timer(0.9).timeout
+	# 技名
+	var flash_rect = ColorRect.new()
+	flash_rect.color = Color(1, 1, 1, 0.9)
+	UI.full(flash_rect)
+	root.add_child(flash_rect)
+	create_tween().tween_property(flash_rect, "color:a", 0.0, 0.5)
+	var title = UI.outlined(UI.label(md.get("name", ""), 84, col.lightened(0.45), true), 14)
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.size = Vector2(1280, 120)
+	title.position = Vector2(0, 300)
+	title.pivot_offset = Vector2(640, 60)
+	title.scale = Vector2(3.0, 3.0)
+	title.modulate.a = 0.0
+	root.add_child(title)
+	var tw2 = create_tween().set_parallel()
+	tw2.tween_property(title, "scale", Vector2.ONE, 0.3).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tw2.tween_property(title, "modulate:a", 1.0, 0.15)
+	Sfx.play("explode", 0.6)
+	battle.shake(1.0)
+	await get_tree().create_timer(1.3).timeout
+	var tw3 = create_tween()
+	tw3.tween_property(root, "modulate:a", 0.0, 0.25)
+	tw3.tween_callback(root.queue_free)
+	await get_tree().create_timer(0.1).timeout
+
+
+# 秘奥義の背景で回る放射線
+class MysticRays extends Control:
+	var col := Color(1, 0.4, 0.3)
+	var t := 0.0
+
+	func _process(delta: float) -> void:
+		t += delta
+		queue_redraw()
+
+	func _draw() -> void:
+		var c = Vector2(640, 360)
+		for i in range(28):
+			var a = t * 0.6 + TAU * i / 28.0
+			var a2 = a + 0.07
+			var r = 1000.0
+			var cc = col if i % 2 == 0 else col.lightened(0.5)
+			cc.a = 0.28
+			UI.poly(self, PackedVector2Array([c, c + Vector2(cos(a), sin(a)) * r, c + Vector2(cos(a2), sin(a2)) * r]), cc)
+		draw_circle(c, 90 + sin(t * 6.0) * 10.0, Color(col.r, col.g, col.b, 0.25))
+
+
 # ------------------------------------------------------------ リザルト
 func show_results(r: Dictionary) -> void:
 	results = UI.panel(Color(0.04, 0.05, 0.1, 0.92), UI.C_GOLD)
@@ -333,7 +503,8 @@ func show_results(r: Dictionary) -> void:
 	for u in r["ups"]:
 		var l = UI.label("%s は Lv%d になった！ (SP+1)" % [DB.cname(u["id"]), u["level"]], 20, UI.C_GOLD, true)
 		v.add_child(l)
-	var hint = UI.label("決定キーで進む", 16, UI.C_DIM)
+	var hint = UI.label("", 16, UI.C_DIM)
+	UI.live_text(hint, func() -> String: return Game.btn("accept") + " で進む")
 	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	v.add_child(hint)
 	results.modulate.a = 0.0
@@ -436,8 +607,7 @@ func _pause_item_target(iid: String) -> void:
 
 func _pause_controls() -> void:
 	var v = _pause_panel("操作説明")
-	var txt = "[b]移動[/b]　A/D または ←/→\n[b]通常攻撃[/b]　J（Z）　…3〜4段コンボ\n[b]術技[/b]　K（X）＋方向なし/↑/↓/←→ で4種類\n　通常攻撃 → 特技 → 奥義 と繋がる\n[b]ジャンプ[/b]　Space（C）　空中でも攻撃できる\n[b]ガード[/b]　L（Shift）　ガード中に←→でステップ回避\n[b]ターゲット切替[/b]　Tab（Q）\n[b]共鳴秘技[/b]　U（V）　絆ゲージ満タンで仲間との合体技\n[b]仲間への指示[/b]　1/2/3 で仲間が術技を使う\n\n仲間同士で同じ敵を攻撃すると「連携」で絆ゲージが大きく上がる。\nナインの応援でも絆がたまる。"
-	txt += "\n\n[b]ゲームパッド[/b]　移動:左スティック/十字キー　攻撃:X(□)　術技:B(○)　ジャンプ:A(×)\nガード:LB/LT(L1/L2)　ターゲット:RB(R1)　共鳴秘技:Y(△)/RT(R2)　仲間に指示:右スティック←↑→　メニュー:START"
+	var txt = Game.controls_text(true)
 	v.add_child(UI.rich(txt, 16))
 	v.add_child(UI.button("戻る", _pause_main))
 	UI.focus_first(v)

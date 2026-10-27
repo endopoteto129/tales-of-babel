@@ -257,27 +257,86 @@ func _refresh() -> void:
 	var spacer = Control.new()
 	spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	side.add_child(spacer)
-	skit_btn = UI.button("", _play_next_skit, 18)
-	side.add_child(skit_btn)
 	_update_skit_btn()
-	side.add_child(UI.button("メニュー [M]", _open_menu, 18))
-	side.add_child(UI.label("←→で選択／決定で進む", 14, UI.C_DIM))
+	var menu_btn = UI.button("", _open_menu, 18)
+	UI.live_text(menu_btn, func() -> String: return "メニュー " + Game.btn("menu"))
+	side.add_child(menu_btn)
+	var help = UI.label("", 14, UI.C_DIM)
+	UI.live_text(help, func() -> String: return "%sで選択／%sで進む" % [Game.key("move"), Game.key("accept")])
+	side.add_child(help)
 	selectable = Game.selectable_nodes()
 	selectable.sort_custom(func(a, b) -> bool: return node_pos[a].x < node_pos[b].x)
 	sel_idx = clamp(sel_idx, 0, max(0, selectable.size() - 1))
 	_update_info()
 
 
+# スキットが見られるときは、右パネルの空いた所に目立つ呼び出しを出す
 func _update_skit_btn() -> void:
-	if not is_instance_valid(skit_btn):
-		return
+	if is_instance_valid(skit_btn):
+		skit_btn.queue_free()
+	skit_btn = null
 	var n = Game.pending_skits.size()
-	skit_btn.visible = n > 0
-	skit_btn.text = "スキットを見る [T]（%d）" % n
+	if n == 0:
+		return
+	var sd: Dictionary = DB.Skits.DATA.get(Game.pending_skits[0], {})
+	var b = Button.new()
+	var normal = UI.box(Color(0.32, 0.1, 0.24, 0.96), Color(1.0, 0.6, 0.85), 4, 14)
+	var hover = UI.box(Color(0.45, 0.14, 0.32, 0.98), UI.C_GOLD, 4, 14)
+	b.add_theme_stylebox_override("normal", normal)
+	b.add_theme_stylebox_override("hover", hover)
+	b.add_theme_stylebox_override("pressed", hover)
+	b.add_theme_stylebox_override("focus", hover)
+	b.position = Vector2(908, 492)
+	b.custom_minimum_size = Vector2(350, 112)
+	b.pressed.connect(func() -> void:
+		Sfx.play("confirm")
+		_play_next_skit())
+	add_child(b)
+	skit_btn = b
+	var hb = HBoxContainer.new()
+	hb.position = Vector2(14, 8)
+	hb.add_theme_constant_override("separation", 0)
+	hb.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	b.add_child(hb)
+	# 登場する仲間の顔
+	var who: Array = []
+	for ln in sd.get("lines", []):
+		if ln[0] != "" and DB.Characters.DATA.has(ln[0]) and not ln[0] in who:
+			who.append(ln[0])
+		if who.size() >= 3:
+			break
+	for cid in who:
+		var por = Portrait.new()
+		por.custom_minimum_size = Vector2(50, 92)
+		por.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		por.setup(cid, "smile")
+		hb.add_child(por)
+	var v = VBoxContainer.new()
+	v.add_theme_constant_override("separation", 0)
+	v.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	hb.add_child(v)
+	var head = UI.outlined(UI.label("スキット発生！", 25, UI.C_GOLD, true), 5)
+	head.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	v.add_child(head)
+	var ttl = UI.label("「%s」" % sd.get("title", "") + ("" if n == 1 else " ほか%d件" % (n - 1)), 16, Color(1.0, 0.85, 0.95))
+	ttl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	v.add_child(ttl)
+	var how = UI.label("", 18, Color.WHITE, true)
+	how.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	UI.live_text(how, func() -> String: return Game.btn("skit") + " で見る")
+	v.add_child(how)
+	# 脈打つように光らせて目を引く
+	b.pivot_offset = Vector2(175, 56)
+	b.scale = Vector2(0.6, 0.6)
+	var pop = b.create_tween()
+	pop.tween_property(b, "scale", Vector2.ONE, 0.35).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	var glow = b.create_tween().set_loops()
+	glow.tween_property(b, "modulate", Color(1.25, 1.15, 1.25), 0.6).set_trans(Tween.TRANS_SINE)
+	glow.tween_property(b, "modulate", Color.WHITE, 0.6).set_trans(Tween.TRANS_SINE)
 
 
 func _on_skit_available(_sid: String) -> void:
-	Main.inst.toast("スキットが発生しました！ [T]", "skit")
+	Main.inst.toast("スキットが発生しました！ " + Game.btn("skit"), "skit")
 	_update_skit_btn()
 
 

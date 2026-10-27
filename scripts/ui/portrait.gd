@@ -37,6 +37,7 @@ func _draw() -> void:
 	if cid == "pots":
 		_draw_pots(col, acc)
 	else:
+		_draw_back_hair(hair)
 		_draw_body(col, acc, skin)
 		_draw_head(hair, skin)
 		_draw_face(skin)
@@ -122,19 +123,18 @@ func _head_c() -> Vector2:
 func _draw_head(hair: Color, skin: Color) -> void:
 	var hc = _head_c()
 	var r = _head_r()
-	# 後ろ髪
+	# 後ろ髪（胴より手前に見える部分）
 	match cid:
 		"nine":
 			draw_circle(hc + Vector2(-52, 6), 24, hair)
 			draw_circle(hc + Vector2(52, 6), 24, hair)
 			UI.poly(self, PackedVector2Array([hc + Vector2(-60, 10), hc + Vector2(-70, 70), hc + Vector2(-44, 60)]), hair)
 			UI.poly(self, PackedVector2Array([hc + Vector2(60, 10), hc + Vector2(70, 70), hc + Vector2(44, 60)]), hair)
-		"angie", "nene", "maria", "sister":
-			UI.poly(self, PackedVector2Array([hc + Vector2(-r - 8, -10), hc + Vector2(-r - 14, 90), hc + Vector2(r + 14, 90), hc + Vector2(r + 8, -10)]), _darker(hair, 0.85))
-		"sona":
-			UI.poly(self, PackedVector2Array([hc + Vector2(-r - 4, -10), hc + Vector2(-r - 6, 46), hc + Vector2(r + 6, 46), hc + Vector2(r + 4, -10)]), _darker(hair, 0.85))
-		"shasta":
-			UI.poly(self, PackedVector2Array([hc + Vector2(-r - 6, -10), hc + Vector2(-r - 8, 60), hc + Vector2(r + 8, 60), hc + Vector2(r + 6, -10)]), _darker(hair, 0.85))
+		"maria":
+			# 頭の後ろでまとめたお団子
+			draw_circle(hc + Vector2(0, -r - 4), 22, _darker(hair, 0.85))
+			draw_arc(hc + Vector2(0, -r - 4), 22, PI * 0.9, PI * 2.1, 12, _darker(hair, 0.65), 2.5)
+			draw_line(hc + Vector2(-30, -r - 14), hc + Vector2(28, -r + 4), Color(0.75, 0.55, 0.3), 4.0)
 	# 顔
 	draw_circle(hc, r, skin)
 	# 前髪
@@ -160,6 +160,24 @@ func _draw_head(hair: Color, skin: Color) -> void:
 			fringe.append(hc + Vector2(-r, -20))
 		"pots":
 			pass
+		"angie":
+			# 右から左へ流した前髪
+			fringe.append(hc + Vector2(r + 2, 2))
+			fringe.append(hc + Vector2(r - 10, -14))
+			fringe.append(hc + Vector2(16, -20))
+			fringe.append(hc + Vector2(-6, -12))
+			fringe.append(hc + Vector2(-24, -22))
+			fringe.append(hc + Vector2(-r + 2, -8))
+			fringe.append(hc + Vector2(-r - 2, 10))
+		"maria":
+			# 左右に分けた前髪
+			fringe.append(hc + Vector2(r + 2, 8))
+			fringe.append(hc + Vector2(r - 12, -20))
+			fringe.append(hc + Vector2(6, -32))
+			fringe.append(hc + Vector2(0, -26))
+			fringe.append(hc + Vector2(-6, -32))
+			fringe.append(hc + Vector2(-r + 12, -20))
+			fringe.append(hc + Vector2(-r - 2, 8))
 		_:
 			fringe.append(hc + Vector2(r, -4))
 			fringe.append(hc + Vector2(20, -22))
@@ -169,6 +187,17 @@ func _draw_head(hair: Color, skin: Color) -> void:
 	UI.poly(self, fringe, hair)
 	# 髪型の特徴
 	match cid:
+		"angie":
+			# 肩にかかる、ゆるく波打つ横髪
+			for side in [-1, 1]:
+				_lock(hc, side, r, 124.0, 22.0, 7.0, hair)
+		"maria":
+			# 顔の横に垂らした細い後れ毛
+			for side in [-1, 1]:
+				_lock(hc, side, r, 62.0, 9.0, 3.0, hair)
+		"nene", "sister":
+			for side in [-1, 1]:
+				_lock(hc, side, r, 100.0, 14.0, 3.0, hair)
 		"jin":
 			draw_circle(hc + Vector2(0, -r - 10), 14, hair)
 			draw_rect(Rect2(hc + Vector2(-8, -r - 2), Vector2(16, 6)), Color(0.8, 0.2, 0.2))
@@ -177,6 +206,66 @@ func _draw_head(hair: Color, skin: Color) -> void:
 		"nine":
 			draw_circle(hc + Vector2(-34, -38), 9, Color(1.0, 0.35, 0.3))
 			draw_circle(hc + Vector2(34, -38), 9, Color(1.0, 0.35, 0.3))
+
+
+# 胴より奥に描く後ろ髪。頭の上の丸みから肩の後ろへ流れる形
+func _draw_back_hair(hair: Color) -> void:
+	var hc = _head_c()
+	var r = _head_r()
+	var length := 0.0
+	var spread := 14.0
+	match cid:
+		"angie":
+			length = 120.0
+			spread = 22.0
+		"nene", "sister":
+			length = 104.0
+		"shasta":
+			length = 72.0
+			spread = 8.0
+		"sona":
+			length = 56.0
+			spread = 6.0
+		"maria":
+			length = 40.0
+			spread = 4.0
+		_:
+			return
+	var col = _darker(hair, 0.82)
+	var pts = PackedVector2Array()
+	for i in range(17):
+		var a = PI * 0.92 + PI * 1.16 * i / 16.0
+		pts.append(hc + Vector2(cos(a), sin(a)) * (r + 8))
+	# 右側を下りて毛先、左側を上る
+	pts.append(hc + Vector2(r + spread, length * 0.35))
+	pts.append(hc + Vector2(r + spread + 4, length * 0.7))
+	var tips := 5
+	for i in range(tips * 2 + 1):
+		var x = lerp(r + spread, -r - spread, float(i) / (tips * 2))
+		var y = length + (10.0 if i % 2 == 0 else -6.0)
+		pts.append(hc + Vector2(x, y))
+	pts.append(hc + Vector2(-r - spread - 4, length * 0.7))
+	pts.append(hc + Vector2(-r - spread, length * 0.35))
+	UI.poly(self, pts, col)
+
+
+# 顔の横から肩の前へ垂れる髪の束。wave で毛先の揺れ幅を決める
+func _lock(hc: Vector2, side: int, r: float, length: float, width: float, wave: float, hair: Color) -> void:
+	var outer = PackedVector2Array()
+	var inner = PackedVector2Array()
+	var steps := 8
+	for i in range(steps + 1):
+		var k = float(i) / steps
+		var y = -14.0 + length * k
+		var x = side * (r - 4.0 + sin(k * PI * 2.2) * wave + k * 6.0)
+		var w = width * (1.0 - k * 0.85)
+		outer.append(hc + Vector2(x + side * w * 0.5, y))
+		inner.append(hc + Vector2(x - side * w * 0.5, y))
+	inner.reverse()
+	var pts = outer
+	pts.append_array(inner)
+	UI.poly(self, pts, hair)
+	draw_polyline(outer, _darker(hair, 0.7), 1.5)
 
 
 func _draw_face(skin: Color) -> void:

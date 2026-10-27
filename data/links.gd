@@ -13,8 +13,4 @@ const DATA := {
 		"lines": [["ren", "続け、ジン！"], ["jin", "ほな、月まで飛ばしたろか！"]]},
 	"john+ren": {"name": "剣闘覇王撃", "power": 8.0, "hits": 7, "color": Color(1.0, 0.75, 0.3), "shape": "meteor", "element": "earth",
 		"lines": [["ren", "ぶち抜くぞ、ジョン！"], ["john", "……おうッ！"]]},
-	# 頂上（赤いマント）以降は、誰と組んでもこの技になる
-	"zettai_red": {"name": "ぜったい、レッドスラッシュ", "power": 12.0, "hits": 14, "color": Color(1.0, 0.2, 0.2), "shape": "wave", "element": "light",
-		"lines": [["ren", "――ぜったい、助ける！"], ["angie", "ナインちゃんの技、見せてやりなさい！"], ["sona", "行って、隊長！"],
-			["jin", "主人公の見せ場や！"], ["john", "行け、レン！"], ["nine", "レッドマンは、ぜったい来てくれる！"]]},
 }

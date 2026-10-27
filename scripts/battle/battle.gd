@@ -45,6 +45,9 @@ var combo_dmg := 0
 var combo_t := 0.0
 var max_combo := 0
 var link := 0.0
+var ovl := 0.0           # オーバーリミッツゲージ（0〜100）
+var ovl_t := 0.0         # オーバーリミッツの残り時間
+const OVL_TIME := 10.0
 var last_hitter: Dictionary = {}  # enemy -> [fighter, time]
 var phoenix_used := false
 var analyzed: Dictionary = {}
@@ -56,6 +59,7 @@ var chat_t := 0.0
 var chat_cd := 0.0
 var chat_used: Dictionary = {}
 var cheer_t := 14.0
+var banter_t := 9.0
 var events_fired: Dictionary = {}
 var rewards: Dictionary = {}
 
@@ -137,6 +141,9 @@ func _intro() -> void:
 	if first_strike_t > 0.0:
 		popup_text(Vector2(900, 380), "先制！", Color(0.6, 0.9, 1.0), 34)
 	chat("start_boss" if kind == "boss" else "start", {})
+	if Game.flags.get("debug_full_gauges", false):
+		ovl = 100.0
+		Game.flags["mystic_gauge"] = 300.0
 	_check_analysis()
 
 
@@ -156,6 +163,11 @@ func _process(delta: float) -> void:
 		dt = 0.0
 	time += dt
 	first_strike_t = max(0.0, first_strike_t - dt)
+	if ovl_t > 0.0:
+		ovl_t -= dt
+		if ovl_t <= 0.0:
+			ovl_t = 0.0
+			popup_text(player.head() + Vector2(0, -30), "オーバーリミッツ終了", Color(1.0, 0.85, 0.5), 18)
 	for f in fighters.duplicate():
 		f.tick(dt)
 	for p in projectiles.duplicate():
@@ -190,6 +202,7 @@ func _process(delta: float) -> void:
 	_tick_chat(delta)
 	if started and not ended:
 		_tick_cheer(dt)
+		_tick_banter(dt)
 		_check_events()
 		_check_end()
 	hud.queue_redraw()
@@ -213,6 +226,8 @@ func _poll_commands() -> void:
 		_cycle_target()
 	elif Input.is_action_just_pressed("link"):
 		try_link()
+	elif Input.is_action_just_pressed("overlimit"):
+		_press_overlimit()
 	else:
 		for i in range(3):
 			if Input.is_action_just_pressed("ally%d" % (i + 1)):
@@ -338,6 +353,9 @@ func apply_hit(att: Fighter, tgt: Fighter, spec: Dictionary, power: float, range
 			dmg *= 1.5
 		if spec.get("link", false):
 			dmg = max(dmg, A * power * 1.2)
+		if spec.has("pct"):
+			# 秘奥義は最大HPの一定割合を保証する（雑魚には3倍）
+			dmg = max(dmg, tgt.max_hp * spec["pct"] * (1.0 if tgt.data.get("boss", false) else 3.0))
 	else:
 		dmg *= Game.bmod("taken_mult")
 		if Game.flags.get("red_cape", false) and tgt.cid == "ren":
@@ -418,6 +436,9 @@ func apply_hit(att: Fighter, tgt: Fighter, spec: Dictionary, power: float, range
 		if before < 100.0 and link >= 100.0:
 			Sfx.play("link", 1.5, -6)
 			chat("link_ready", {})
+		if not spec.get("link", false):
+			add_ovl(1.4)
+			add_mystic(1.6 if ovl_t > 0.0 else 0.7)
 		if spec.get("normal", false):
 			att.tp = min(att.max_tp, att.tp + 1.0 + Game.bmod("tp_on_hit"))
 		if combo_hits == 20:
@@ -427,6 +448,7 @@ func apply_hit(att: Fighter, tgt: Fighter, spec: Dictionary, power: float, range
 		if combo_hits in [15, 30]:
 			chat("big_combo", {"who": att.cid})
 	else:
+		add_ovl(4.0)
 		if tgt.alive() and tgt.hp_ratio() < 0.3 and not events_fired.has("low_" + tgt.cid):
 			events_fired["low_" + tgt.cid] = true
 			chat("low_hp", {"who": tgt.cid})
@@ -611,21 +633,15 @@ func _end_combo() -> void:
 
 
 # ------------------------------------------------------------ 共鳴秘技
+# 共鳴秘技の相手は、戦える仲間からランダムに選ぶ
 func link_partner() -> String:
-	if Game.flags.get("red_cape", false):
-		return "nine"
-	var best = ""
-	var bb = -1
+	var cands: Array = []
 	for p in party:
-		if p == player or not p.alive():
-			continue
-		var b = Game.get_bond("ren", p.cid) + randi() % 3
-		if b > bb:
-			bb = b
-			best = p.cid
-	if best == "":
-		best = "nine" if companions.nine_visible else ""
-	return best
+		if p != player and p.alive():
+			cands.append(p.cid)
+	if cands.is_empty():
+		return "nine" if companions.nine_visible else ""
+	return cands[randi() % cands.size()]
 
 
 func try_link() -> void:
@@ -636,8 +652,6 @@ func try_link() -> void:
 		return
 	var key = DB.pair_key("ren", partner)
 	var ld: Dictionary = DB.Links.DATA.get(key, {})
-	if Game.flags.get("red_cape", false):
-		ld = DB.Links.DATA.get("zettai_red", {})
 	if ld.is_empty():
 		return
 	frozen = true
@@ -667,11 +681,128 @@ func try_link() -> void:
 		chat("link_used", {"who": partner})
 
 
+# ------------------------------------------------------------ オーバーリミッツと秘奥義
+func mystic_gauge() -> float:
+	return float(Game.flags.get("mystic_gauge", 0.0))
+
+
+func add_mystic(v: float) -> void:
+	var before = mystic_gauge()
+	var after = min(300.0, before + v)
+	Game.flags["mystic_gauge"] = after
+	if int(before / 100.0) < int(after / 100.0):
+		popup_text(player.head() + Vector2(0, -50), "秘奥義ゲージ %d%%" % (int(after / 100.0) * 100), Color(1.0, 0.5, 0.45), 20, true)
+		Sfx.play("link", 1.8, -8)
+
+
+func add_ovl(v: float) -> void:
+	if ovl_t > 0.0 or ended:
+		return
+	var before = ovl
+	ovl = min(100.0, ovl + v * Game.bmod("link_gain_mult"))
+	if before < 100.0 and ovl >= 100.0:
+		Sfx.play("link", 1.3, -6)
+		chat("ovl_ready", {})
+
+
+func _press_overlimit() -> void:
+	if player == null or not player.alive():
+		return
+	if ovl_t > 0.0:
+		if mystic_gauge() >= 100.0:
+			fire_mystic()
+		else:
+			popup_text(player.head() + Vector2(0, -30), "秘奥義ゲージが足りない", Color(1.0, 0.6, 0.6), 18)
+	elif ovl >= 100.0:
+		start_ovl()
+	else:
+		popup_text(player.head() + Vector2(0, -30), "OVLゲージが足りない", Color(0.8, 0.8, 0.9), 16)
+
+
+func start_ovl() -> void:
+	ovl = 0.0
+	ovl_t = OVL_TIME
+	if player.state == "hit":
+		player.hitstun = 0.0
+		player.set_state("idle" if player.on_ground() else "jump")
+	player.invul = max(player.invul, 0.4)
+	hitstop = 0.25
+	flash(Color(1.0, 0.85, 0.4, 0.7))
+	shake(0.5)
+	Sfx.play("link", 0.8)
+	spawn_fx("break", player.center(), Color(1.0, 0.85, 0.4), 1.4)
+	hud.show_banner("OVER LIMIT!", Color(1.0, 0.85, 0.35))
+	chat("ovl", {})
+
+
+func fire_mystic() -> void:
+	if frozen or ended:
+		return
+	var level: int = min(3, int(mystic_gauge() / 100.0))
+	var cands: Array = []
+	for p in party:
+		if p != player and p.alive():
+			cands.append(p.cid)
+	cands.shuffle()
+	var allies: Array = cands.slice(0, level - 1)
+	level = 1 + allies.size()
+	Game.flags["mystic_gauge"] = mystic_gauge() - level * 100.0
+	ovl_t = 0.0
+	var md: Dictionary = DB.Mystics.pick(level, allies)
+	var total_pct: float = [0.0, 0.16, 0.26, 0.40][level]
+	frozen = true
+	if is_instance_valid(chat_bubble):
+		chat_bubble.queue_free()
+	chat_t = 0.0
+	for p in party:
+		p.invul = max(p.invul, 6.0)
+	Sfx.play("link", 0.6)
+	await hud.play_mystic_cutin(md)
+	if not is_inside_tree():
+		return
+	frozen = false
+	# 参加した仲間が順に一撃ずつ入れ、最後に全員の大技
+	var members: Array = md["members"]
+	var waves = members.size() + 1
+	var total_hits: int = md.get("hits", 14)
+	var shapes = ["burst", "spikes", "storm"]
+	for i in range(members.size()):
+		var cid: String = members[i]
+		var col: Color = DB.ccolor(cid).lightened(0.25)
+		var h_i: int = max(3, total_hits / waves)
+		var spec = {"aoe": {"w": 1400, "h": 700, "delay": 0.02, "hits": h_i, "interval": 0.05, "shape": shapes[i % shapes.size()], "at_self": true},
+			"power": md["power"] / waves / h_i, "color": col, "link": true, "knock": 30, "launch": 160, "element": md.get("element", ""),
+			"pct": total_pct / waves / h_i}
+		spawn_aoe(player, spec, 640, spec["power"])
+		popup_text(speaker_pos(cid) + Vector2(0, -40), DB.cname(cid), col, 22, true)
+		flash(Color(col.r, col.g, col.b, 0.55))
+		shake(0.7)
+		Sfx.play("explode", 1.0 + i * 0.15)
+		await get_tree().create_timer(0.45).timeout
+		if not is_inside_tree() or ended:
+			return
+	var hf: int = max(6, total_hits - (total_hits / waves) * members.size())
+	var fin = {"aoe": {"w": 1400, "h": 700, "delay": 0.05, "hits": hf, "interval": 0.06, "shape": md.get("shape", "pillar"), "at_self": true},
+		"power": md["power"] / waves / hf, "color": md.get("color", Color(1, 0.4, 0.3)), "link": true, "knock": 50, "launch": 260,
+		"element": md.get("element", ""), "pct": total_pct / waves / hf}
+	spawn_aoe(player, fin, 640, fin["power"])
+	flash(Color(1, 1, 1, 0.9))
+	shake(1.4)
+	slowmo = 0.35
+	slowmo_t = 0.7
+	Sfx.play("explode", 0.7)
+	Game.award_title("mystic_first", "")
+	Game.count("mystics")
+	await get_tree().create_timer(1.4).timeout
+	if is_inside_tree() and not ended:
+		chat("mystic_used", {"who": allies[0] if not allies.is_empty() else "ren"})
+
+
 # ------------------------------------------------------------ ショートチャット
 func chat(event: String, ctx: Dictionary) -> void:
 	if not DB.Chats.DATA.has(event):
 		return
-	if chat_cd > 0.0 and event not in ["start", "start_boss", "victory", "boss_phase", "ally_ko", "analysis", "link_used"]:
+	if chat_cd > 0.0 and event not in ["start", "start_boss", "victory", "boss_phase", "ally_ko", "analysis", "link_used", "ovl", "mystic_used"]:
 		return
 	var cands: Array = []
 	var list: Array = DB.Chats.DATA[event]
@@ -785,6 +916,15 @@ func speaker_pos(sp: String) -> Vector2:
 		if HudScript.officer_of(e.cid) == sp:
 			return e.head() + Vector2(0, -16)
 	return Vector2(640, 200)
+
+
+# 戦闘中、手が空いたときの仲間どうしのかけあい
+func _tick_banter(dt: float) -> void:
+	banter_t -= dt
+	if banter_t <= 0.0:
+		banter_t = randf_range(11.0, 17.0)
+		if chat_t <= 0.0 and chat_queue.is_empty():
+			chat("banter", {})
 
 
 func _tick_cheer(dt: float) -> void:
@@ -939,4 +1079,6 @@ func use_item(item_id: String, tgt: Fighter) -> bool:
 	spawn_fx("heal", tgt.center(), Color(0.9, 0.6, 0.6))
 	popup_text(tgt.head(), it["name"], Color(1.0, 0.9, 0.7), 20)
 	Sfx.play("heal")
+	if chat_t <= 0.0 and chat_queue.is_empty():
+		chat("item", {"who": tgt.cid})
 	return true

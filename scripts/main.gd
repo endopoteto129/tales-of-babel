@@ -48,6 +48,9 @@ func _ready() -> void:
 	if "--shots" in args:
 		add_child(load("res://scripts/shots.gd").new())
 		return
+	if "--gallery" in args:
+		add_child(load("res://scripts/gallery.gd").new())
+		return
 	if "--balance" in args:
 		add_child(load("res://scripts/balance.gd").new())
 		return

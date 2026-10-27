@@ -1,6 +1,7 @@
 # タイトル画面
 extends Control
 
+var debug_full_gauges := false
 var t := 0.0
 var menu: VBoxContainer
 var stars: Array = []
@@ -37,8 +38,7 @@ func _ready() -> void:
 	menu.add_child(cont)
 	menu.add_child(UI.button("操作説明", _show_help, 24))
 	# エディタから実行したとき（デバッグビルド）だけ表示
-	if OS.is_debug_build():
-		menu.add_child(UI.button("デバッグ：章を選ぶ", _show_debug, 20))
+	menu.add_child(UI.button("デバッグ：層を選んで始める", _show_debug, 20))
 	if not OS.has_feature("web"):
 		menu.add_child(UI.button("終了", func() -> void: get_tree().quit(), 24))
 	UI.focus_first(menu)
@@ -107,7 +107,7 @@ func _show_help() -> void:
 	var v = VBoxContainer.new()
 	help.add_child(v)
 	v.add_child(UI.label("操作説明", 28, UI.C_GOLD, true))
-	v.add_child(UI.rich("[b]バトル[/b]（ゲームパッド対応）\n移動：A/D・←→　通常攻撃：J　術技：K（＋↑/↓/←→で4種）\nジャンプ：Space　ガード：L（ガード中←→でステップ）\nターゲット切替：Tab　共鳴秘技：U（絆ゲージ満タン時）　メニュー：Esc\n仲間に術技を指示：1/2/3\n[b]ゲームパッド[/b]　移動：左スティック/十字キー　攻撃：X(□)　術技：B(○)　ジャンプ：A(×)\nガード：LB/LT　ターゲット：RB　共鳴秘技：Y/RT　仲間に指示：右スティック←↑→　メニュー：START　スキット：BACK\n\n[b]マップ[/b]\n←→でルート選択、決定で進む。スキット：T　メニュー：M\n\n[b]テイルズ流のコツ[/b]\n通常攻撃 → 特技 → 奥義 の順にキャンセルして繋げよう。\n仲間と同じ敵を叩くと「連携」で絆ゲージが一気にたまる。", 18))
+	v.add_child(UI.rich(Game.controls_text(), 18))
 	v.add_child(UI.button("閉じる", func() -> void:
 		help.queue_free()
 		help = null
@@ -125,7 +125,7 @@ func _show_debug() -> void:
 	var v = VBoxContainer.new()
 	v.add_theme_constant_override("separation", 8)
 	help.add_child(v)
-	v.add_child(UI.label("デバッグ：章を選ぶ", 28, UI.C_GOLD, true))
+	v.add_child(UI.label("デバッグ：層を選んで始める", 28, UI.C_GOLD, true))
 	v.add_child(UI.label("レベル・スキル・所持品・仲間は、通常プレイでその時点に想定される状態にそろえます。", 16, UI.C_DIM))
 	var grid = GridContainer.new()
 	grid.columns = 2
@@ -142,6 +142,12 @@ func _show_debug() -> void:
 			var b = UI.button(label, func() -> void: _debug_jump(ff, bb), 17)
 			b.custom_minimum_size = Vector2(430, 0)
 			grid.add_child(b)
+	var full = CheckBox.new()
+	full.text = "戦闘開始時に OVL・秘奥義ゲージを満タンにする（試し撃ち用）"
+	full.button_pressed = debug_full_gauges
+	full.add_theme_font_size_override("font_size", 17)
+	full.toggled.connect(func(on: bool) -> void: debug_full_gauges = on)
+	v.add_child(full)
 	v.add_child(UI.button("閉じる", func() -> void:
 		help.queue_free()
 		help = null
@@ -151,4 +157,6 @@ func _show_debug() -> void:
 
 func _debug_jump(f: int, at_boss: bool) -> void:
 	Game.debug_setup(f, at_boss)
+	if debug_full_gauges:
+		Game.flags["debug_full_gauges"] = true
 	Main.inst.goto("map", {})

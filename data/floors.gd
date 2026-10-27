@@ -5,7 +5,7 @@ extends RefCounted
 # 全体の難易度調整（敵のHP倍率・攻撃力倍率）。boss_hp は層ごとのボスHP倍率
 const ENEMY_HP_MULT := 1.6
 const ENEMY_POWER_MULT := 1.45
-const BOSS_POWER_MULT := 1.15
+const BOSS_POWER_MULT := 0.65
 
 const DATA := [
 	{
@@ -34,14 +34,14 @@ const DATA := [
 		"deco": "colosseum", "bg_top": Color(0.55, 0.35, 0.2), "bg_bottom": Color(0.8, 0.62, 0.4), "ground": Color(0.6, 0.45, 0.3), "accent": Color(1.0, 0.8, 0.4),
 		"groups": [["lion", "soldier"], ["soldier", "soldier"], ["lion", "lion"], ["gunner", "soldier"]],
 		"elites": [["soldier", "soldier", "gunner"], ["golem", "lion"]],
-		"boss": ["boss_nene"], "boss_hp": 1.6, "scale": 2.3,
+		"boss": ["boss_nene"], "boss_hp": 1.15, "scale": 2.3,
 	},
 	{
 		"name": "第五層 星詠みの書庫", "sub": "誰かの『認識』が眠る場所",
 		"deco": "library", "bg_top": Color(0.06, 0.05, 0.16), "bg_bottom": Color(0.22, 0.15, 0.36), "ground": Color(0.25, 0.18, 0.3), "accent": Color(0.75, 0.6, 1.0),
 		"groups": [["book", "book"], ["mage_soldier", "soldier"], ["book", "wisp", "wisp"], ["gunner", "book"]],
 		"elites": [["mage_soldier", "mage_soldier", "soldier"], ["golem", "book", "book"]],
-		"boss": ["boss_val"], "boss_hp": 1.35, "scale": 2.9,
+		"boss": ["boss_val"], "boss_hp": 1.1, "scale": 2.9,
 	},
 	{
 		"name": "第六層 機巧の大工房", "sub": "百年前の天才が遺したもの",
@@ -55,6 +55,6 @@ const DATA := [
 		"deco": "summit", "bg_top": Color(0.3, 0.4, 0.75), "bg_bottom": Color(0.9, 0.82, 0.9), "ground": Color(0.85, 0.85, 0.9), "accent": Color(1.0, 0.95, 0.7),
 		"groups": [["soldier", "soldier", "gunner"], ["drone", "drone", "mage_soldier"]],
 		"elites": [["soldier", "mage_soldier", "gunner"]],
-		"boss": ["boss_shasta"], "boss_hp": 0.45, "scale": 4.0, "final": true,
+		"boss": ["boss_shasta"], "boss_hp": 0.4, "scale": 4.0, "final": true,
 	},
 ]

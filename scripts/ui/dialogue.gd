@@ -108,7 +108,8 @@ func _ready() -> void:
 	add_child(caption)
 	caption.z_index = 6
 
-	hint_label = UI.outlined(UI.label("決定: 進む　Esc: スキップ", 16, UI.C_DIM), 3)
+	hint_label = UI.outlined(UI.label("", 16, UI.C_DIM), 3)
+	UI.live_text(hint_label, func() -> String: return "%s: 進む　%s: スキップ" % [Game.key("accept"), Game.key("pause")])
 	hint_label.position = Vector2(1000, 694)
 	add_child(hint_label)
 	hint_label.z_index = 5
