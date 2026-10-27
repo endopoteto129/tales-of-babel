@@ -48,6 +48,19 @@ var link := 0.0
 var ovl := 0.0           # オーバーリミッツゲージ（0〜100）
 var ovl_t := 0.0         # オーバーリミッツの残り時間
 const OVL_TIME := 10.0
+# ゲージのたまりやすさ（1ヒットあたり）。OVLはボス戦で1回、絆はそれより少し多く満タンになる目安
+const LINK_PER_HIT := 0.18
+const LINK_PER_CHAIN := 0.45
+const LINK_PER_CHEER := 5.0
+const OVL_PER_HIT := 0.6      # レン自身の攻撃と被弾でだけたまる
+const OVL_PER_DAMAGE := 2.5
+const MYSTIC_PER_HIT := 2.5   # オーバーリミッツ中だけたまる
+var finish_target: Fighter     # とどめ待ちのボス
+var finishing := false
+var finish_auto_t := 0.0
+var gauge_probe := false      # バランス確認用：満タンになった回数を数えて0に戻す
+var link_fills := 0
+var ovl_fills := 0
 var last_hitter: Dictionary = {}  # enemy -> [fighter, time]
 var phoenix_used := false
 var analyzed: Dictionary = {}
@@ -200,6 +213,11 @@ func _process(delta: float) -> void:
 	if player_target == null or not player_target.alive():
 		player_target = nearest_enemy(player) if player else null
 	_tick_chat(delta)
+	if finish_target and not frozen and player and not player.is_player:
+		# AI任せ（バランス確認・自動テスト）のときは自動でとどめ
+		finish_auto_t += delta
+		if finish_auto_t > 1.5:
+			fire_finisher()
 	if started and not ended:
 		_tick_cheer(dt)
 		_tick_banter(dt)
@@ -227,7 +245,10 @@ func _poll_commands() -> void:
 	elif Input.is_action_just_pressed("link"):
 		try_link()
 	elif Input.is_action_just_pressed("overlimit"):
-		_press_overlimit()
+		if finish_target and is_instance_valid(finish_target):
+			fire_finisher()
+		else:
+			_press_overlimit()
 	else:
 		for i in range(3):
 			if Input.is_action_just_pressed("ally%d" % (i + 1)):
@@ -329,6 +350,8 @@ func enemy_pick_target(e: Fighter) -> Fighter:
 func apply_hit(att: Fighter, tgt: Fighter, spec: Dictionary, power: float, ranged: bool, dir_override: int = 0) -> void:
 	if ended and tgt.team == 0:
 		return
+	if tgt.held:
+		return
 	var magic: bool = spec.get("kind", "") == "spell" or spec.get("magic_attack", false) or spec.get("magic", false)
 	var A: float = (att.matk if magic else att.atk) * att.stat_mult("matk" if magic else "atk")
 	var D: float = (tgt.mdef if magic else tgt.def) * tgt.stat_mult("mdef" if magic else "def")
@@ -398,6 +421,10 @@ func apply_hit(att: Fighter, tgt: Fighter, spec: Dictionary, power: float, range
 		spawn_fx("guard", tgt.center() + Vector2(-dir * 20, 0), Color(0.6, 0.85, 1.0))
 		tgt.vx = dir * 120.0
 		if idmg > 0:
+			if tgt.holds_at_one() and tgt.hp - idmg < 1.0:
+				tgt.hp = 1.0
+				on_boss_held(tgt)
+				return
 			tgt.hp = max(1.0 if tgt.team == 0 and tgt.hp > 1 else 0.0, tgt.hp - idmg)
 			_dmg_number(tgt, idmg, false, "", tgt.team == 0)
 			if tgt.hp <= 0.0:
@@ -424,10 +451,10 @@ func apply_hit(att: Fighter, tgt: Fighter, spec: Dictionary, power: float, range
 		combo_dmg += idmg
 		combo_t = 1.6
 		max_combo = max(max_combo, combo_hits)
-		var gain = 0.28 * Game.bmod("link_gain_mult")
+		var gain = LINK_PER_HIT * Game.bmod("link_gain_mult")
 		var lh: Array = last_hitter.get(tgt, [])
 		if not lh.is_empty() and lh[0] != att and time - lh[1] < 1.2:
-			gain += 0.7 * Game.bmod("link_gain_mult")
+			gain += LINK_PER_CHAIN * Game.bmod("link_gain_mult")
 			if randf() < 0.12:
 				popup_text(tgt.head() + Vector2(0, -40), "連携！", Color(1.0, 0.75, 0.9), 22)
 		last_hitter[tgt] = [att, time]
@@ -436,9 +463,14 @@ func apply_hit(att: Fighter, tgt: Fighter, spec: Dictionary, power: float, range
 		if before < 100.0 and link >= 100.0:
 			Sfx.play("link", 1.5, -6)
 			chat("link_ready", {})
+			if gauge_probe:
+				link_fills += 1
+				link = 0.0
 		if not spec.get("link", false):
-			add_ovl(1.4)
-			add_mystic(1.6 if ovl_t > 0.0 else 0.7)
+			if att == player:
+				add_ovl(OVL_PER_HIT)
+			if ovl_t > 0.0:
+				add_mystic(MYSTIC_PER_HIT)
 		if spec.get("normal", false):
 			att.tp = min(att.max_tp, att.tp + 1.0 + Game.bmod("tp_on_hit"))
 		if combo_hits == 20:
@@ -448,7 +480,8 @@ func apply_hit(att: Fighter, tgt: Fighter, spec: Dictionary, power: float, range
 		if combo_hits in [15, 30]:
 			chat("big_combo", {"who": att.cid})
 	else:
-		add_ovl(4.0)
+		if tgt == player:
+			add_ovl(OVL_PER_DAMAGE)
 		if tgt.alive() and tgt.hp_ratio() < 0.3 and not events_fired.has("low_" + tgt.cid):
 			events_fired["low_" + tgt.cid] = true
 			chat("low_hp", {"who": tgt.cid})
@@ -703,6 +736,9 @@ func add_ovl(v: float) -> void:
 	if before < 100.0 and ovl >= 100.0:
 		Sfx.play("link", 1.3, -6)
 		chat("ovl_ready", {})
+		if gauge_probe:
+			ovl_fills += 1
+			ovl = 0.0
 
 
 func _press_overlimit() -> void:
@@ -796,6 +832,72 @@ func fire_mystic() -> void:
 	await get_tree().create_timer(1.4).timeout
 	if is_inside_tree() and not ended:
 		chat("mystic_used", {"who": allies[0] if not allies.is_empty() else "ren"})
+
+
+# ------------------------------------------------------------ ボスのとどめ
+func on_boss_held(f: Fighter) -> void:
+	if f.held:
+		return
+	f.held = true
+	f.act = {}
+	f.cast_id = ""
+	f.break_t = 0.0
+	f.vx = 0.0
+	f.set_state("down")
+	f.down_t = 9999.0
+	f.invul = 9999.0
+	finish_target = f
+	finish_auto_t = 0.0
+	hitstop = 0.3
+	slowmo = 0.4
+	slowmo_t = 0.8
+	flash(Color(1, 1, 1, 0.6))
+	shake(0.8)
+	Sfx.play("explode", 0.9)
+	popup_text(f.head() + Vector2(0, -50), "FINISH CHANCE!", Color(1.0, 0.85, 0.3), 30, true)
+
+
+func fire_finisher() -> void:
+	var f: Fighter = finish_target
+	if f == null or not is_instance_valid(f) or frozen or ended:
+		return
+	finish_target = null
+	finishing = true
+	var fd: Dictionary = DB.Finishers.DATA[f.cid].duplicate()
+	fd["header"] = "FINISH"
+	frozen = true
+	if is_instance_valid(chat_bubble):
+		chat_bubble.queue_free()
+	chat_t = 0.0
+	chat_queue.clear()
+	for p in party:
+		p.invul = max(p.invul, 4.0)
+	Sfx.play("link", 0.6)
+	await hud.play_mystic_cutin(fd)
+	if not is_inside_tree():
+		return
+	frozen = false
+	# 大きな斬撃でとどめ
+	var col: Color = fd.get("color", Color(1, 0.4, 0.3))
+	for i in range(5):
+		spawn_fx("crit", f.center() + Vector2(randf_range(-40, 40), randf_range(-50, 30)), col, 2.2)
+		spawn_fx("break", f.center(), col.lightened(0.3), 1.6)
+		flash(Color(col.r, col.g, col.b, 0.5))
+		shake(0.9)
+		Sfx.play("hit_heavy", 0.8 + i * 0.1)
+		await get_tree().create_timer(0.12).timeout
+		if not is_inside_tree():
+			return
+	flash(Color(1, 1, 1, 0.95))
+	slowmo = 0.3
+	slowmo_t = 1.0
+	Sfx.play("explode", 0.6)
+	f.held = false
+	f.invul = 0.0
+	f.hp = 0.0
+	_dmg_number(f, int(f.max_hp * 0.1) + 999, true, "FINISH", false)
+	f.die(-player.facing if player else 1)
+	finishing = false
 
 
 # ------------------------------------------------------------ ショートチャット
@@ -933,7 +1035,7 @@ func _tick_cheer(dt: float) -> void:
 	cheer_t -= dt
 	if cheer_t <= 0.0:
 		cheer_t = randf_range(13.0, 20.0)
-		link = min(100.0, link + 8.0 * Game.bmod("link_gain_mult"))
+		link = min(100.0, link + LINK_PER_CHEER * Game.bmod("link_gain_mult"))
 		companions.cheer()
 		popup_text(companions.nine_pos() + Vector2(0, -100), "応援！ 絆+", Color(1.0, 0.7, 0.4), 16)
 		if chat_t <= 0.0 and chat_queue.is_empty():

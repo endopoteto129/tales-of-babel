@@ -1,4 +1,4 @@
-# エンディング（スタッフロール）。物語はジンが記した『Tales of Babel』として締めくくられる。
+# エンディング（スタッフロール）。物語はジンが記した『バベルの塔の物語』として締めくくられ、最後にレンとナインの場面が流れる。
 extends Control
 
 var t := 0.0
@@ -45,8 +45,13 @@ func _process(delta: float) -> void:
 	if roll.position.y + roll.size.y < 300 and not done:
 		done = true
 		await get_tree().create_timer(2.0).timeout
-		if is_inside_tree():
-			Main.inst.goto("title")
+		if not is_inside_tree():
+			return
+		var data: Dictionary = DB.Story.AFTER_CREDITS.duplicate()
+		data["mode"] = "story"
+		Main.inst.play_dialogue(data, func() -> void:
+			if is_inside_tree():
+				Main.inst.goto("title"))
 	queue_redraw()
 
 

@@ -158,13 +158,6 @@ const DATA := {
 		"reach": 110, "height": 100, "knock": 6, "dash": 50, "fx": "slash",
 		"color": Color(1.0, 0.8, 0.9), "desc": "玉の枝のごとく枝分かれする無数の斬撃。",
 	},
-	# ---------- 秘奥義 ----------
-	"zettai_red": {
-		"name": "絶対レッドスラッシュ", "kind": "mystic", "tp": 0,
-		"startup": 0.5, "active": 1.2, "recovery": 0.5, "power": 1.2, "hits": 12, "hit_interval": 0.09,
-		"reach": 1400, "height": 600, "offset": -700, "knock": 30, "fx": "mystic",
-		"color": Color(1.0, 0.2, 0.2), "desc": "ナインが名付けた、レッドマンの必殺技。",
-	},
 	# ---------- ジョン（格闘） ----------
 	"renga": {
 		"name": "連牙弾", "kind": "tech", "tp": 6,

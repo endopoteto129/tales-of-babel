@@ -6,9 +6,6 @@ extends RefCounted
 const SOLO := {
 	"ren": {"name": "紅蓮・天穿斬", "power": 9.0, "hits": 14, "shape": "pillar", "element": "fire", "color": Color(1.0, 0.35, 0.25),
 		"lines": {"ren": "ここで決める……！　天まで、穿て！"}},
-	# 頂上（赤く染まった白衣を羽織った後）
-	"ren_red": {"name": "絶対レッドスラッシュ", "power": 12.0, "hits": 18, "shape": "wave", "element": "light", "color": Color(1.0, 0.15, 0.2),
-		"lines": {"ren": "――ぜったい、助ける！！"}},
 }
 
 # レン＋仲間1人。キーは仲間の id
@@ -52,8 +49,7 @@ static func pick(level: int, allies: Array) -> Dictionary:
 	var md: Dictionary
 	var lines := {}
 	if level <= 1 or allies.is_empty():
-		var key = "ren_red" if Game.flags.get("red_cape", false) else "ren"
-		md = SOLO[key].duplicate()
+		md = SOLO["ren"].duplicate()
 		lines = md["lines"]
 	else:
 		var ids: Array = allies.duplicate()

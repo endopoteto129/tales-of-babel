@@ -54,6 +54,7 @@ var invul := 0.0
 var armor := 0.0
 var armor_max := 0.0
 var armor_regen_t := 0.0
+var held := false       # HP1で踏みとどまり、とどめ演出を待っているボス
 var break_t := 0.0       # ブレイク中の残り時間。終わると装甲が全快する
 var resist_t := 0.0      # のけぞらない時間（ブレイク明け・連続被弾の後）
 var stun_chain := 0.0    # 敵がのけぞり続けている時間
@@ -647,6 +648,12 @@ func _tick_cast(dt: float) -> void:
 
 # ------------------------------------------------------------ 被弾
 func take_hit(dmg: int, knock: float, launch: float, from_dir: int, stun: float, heavy: bool) -> void:
+	if held:
+		return
+	if holds_at_one() and hp - dmg < 1.0:
+		hp = 1.0
+		battle.on_boss_held(self)
+		return
 	hp = max(0.0, hp - dmg)
 	flash_t = 0.12
 	if team == 0:
@@ -696,6 +703,11 @@ func take_hit(dmg: int, knock: float, launch: float, from_dir: int, stun: float,
 		vy = max(vy, 120.0)
 	hitstun = (0.28 + knock / 900.0) * stun
 	set_state("hit")
+
+
+# とどめ演出のあるボスは、HP1で踏みとどまる
+func holds_at_one() -> bool:
+	return team == 1 and data.get("boss", false) and DB.Finishers.DATA.has(cid) and not battle.finishing
 
 
 func _recover_from_break() -> void:

@@ -93,6 +93,7 @@ func _draw() -> void:
 	_draw_enemies()
 	_draw_link()
 	_draw_ovl_gauges()
+	_draw_finish_prompt()
 	_draw_buffs()
 	if battle.started and not battle.ended:
 		var hint = "J:攻撃  K(+↑↓→):術技  Space:ジャンプ  L:ガード  Tab:ターゲット  U:共鳴秘技  I:オーバーリミッツ  Esc:メニュー"
@@ -230,6 +231,22 @@ func _draw_ovl_gauges() -> void:
 		draw_string(UI.FONT, Vector2(x, my + 30), who + "の秘奥義", HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color(1, 0.85, 0.8))
 	if g >= 100.0 and battle.ovl_t <= 0.0:
 		draw_string(UI.FONT, Vector2(x, my + 46), "OVL中に使える", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, UI.C_DIM)
+
+
+# ボスがHP1になったら、頭上に △ とどめボタンを出す
+func _draw_finish_prompt() -> void:
+	var f: Fighter = battle.finish_target
+	if f == null or not is_instance_valid(f) or battle.frozen:
+		return
+	var p: Vector2 = f.head() + battle.world.position + Vector2(0, -70)
+	var pulse = 1.0 + sin(t * 9.0) * 0.12
+	var r = 30.0 * pulse
+	draw_circle(p, r + 8, Color(0, 0, 0, 0.6))
+	draw_arc(p, r + 8, 0, TAU, 40, Color(1.0, 0.85, 0.3), 3.0)
+	var tri = PackedVector2Array([p + Vector2(0, -r * 0.7), p + Vector2(r * 0.65, r * 0.45), p + Vector2(-r * 0.65, r * 0.45)])
+	draw_polyline(PackedVector2Array([tri[0], tri[1], tri[2], tri[0]]), Color(0.4, 1.0, 0.75), 5.0)
+	var txt = "とどめ " + Game.btn("overlimit")
+	draw_string(UI.FONT_BOLD, p + Vector2(-110, r + 40), txt, HORIZONTAL_ALIGNMENT_CENTER, 220, 26, Color(1.0, 0.9, 0.4, 0.75 + sin(t * 9.0) * 0.25))
 
 
 func _draw_buffs() -> void:
@@ -395,7 +412,7 @@ func play_mystic_cutin(md: Dictionary) -> void:
 		root.add_child(bar)
 		bars.append(bar)
 		create_tween().tween_property(bar, "position:y", 0.0 if i == 0 else 650.0, 0.3)
-	var head = UI.outlined(UI.label("秘奥義", 30, Color(1.0, 0.9, 0.6), true), 6)
+	var head = UI.outlined(UI.label(md.get("header", "秘奥義"), 30, Color(1.0, 0.9, 0.6), true), 6)
 	head.position = Vector2(40, 18)
 	root.add_child(head)
 	var n = members.size()
@@ -429,6 +446,22 @@ func play_mystic_cutin(md: Dictionary) -> void:
 		Sfx.play("slash", 0.6 + i * 0.12)
 		battle.flash(Color(col.r, col.g, col.b, 0.3))
 		await get_tree().create_timer(0.9).timeout
+	# 叫び（一語ずつ大きく）
+	for word in md.get("shout", []):
+		var w = UI.outlined(UI.label(word, 110, Color(1.0, 0.3, 0.25), true), 16, Color(1, 1, 1, 0.95))
+		w.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		w.size = Vector2(1280, 160)
+		w.position = Vector2(0, 280)
+		w.pivot_offset = Vector2(640, 80)
+		w.scale = Vector2(2.4, 2.4)
+		root.add_child(w)
+		var tws = create_tween()
+		tws.tween_property(w, "scale", Vector2.ONE, 0.16).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+		Sfx.play("hit_heavy", 0.7)
+		battle.shake(1.0)
+		battle.flash(Color(1.0, 0.3, 0.25, 0.4))
+		await get_tree().create_timer(0.62).timeout
+		w.queue_free()
 	# 技名
 	var flash_rect = ColorRect.new()
 	flash_rect.color = Color(1, 1, 1, 0.9)

@@ -41,6 +41,7 @@ func _run() -> void:
 			var b: Node = main.screen
 			if b.get("player"):
 				b.player.is_player = false
+				b.gauge_probe = true
 			var t := 0.0
 			var limit = 180.0 if fi[1] == "boss" else 60.0
 			while t < limit:
@@ -57,7 +58,7 @@ func _run() -> void:
 				var res = "WIN" if alive_e == 0 else ("LOSE" if alive_p == 0 else "TIMEOUT")
 				if alive_e > 0:
 					res += "(敵HP%.0f%%)" % (b.enemies.filter(func(e) -> bool: return e.alive())[0].hp_ratio() * 100.0)
-				print("[balance] F%d %-6s %-40s %s t=%d party=%d/%d hp=%.2f lv=%d" % [f, fi[1], str(fi[0]), res, t, alive_p, b.party.size(), hp_sum / b.party.size(), Game.party[0]["level"]])
+				print("[balance] F%d %-6s %-40s %s t=%d party=%d/%d hp=%.2f lv=%d 絆%d回 OVL%d回" % [f, fi[1], str(fi[0]), res, t, alive_p, b.party.size(), hp_sum / b.party.size(), Game.party[0]["level"], b.link_fills, b.ovl_fills])
 	print("[balance] done")
 	get_tree().quit()
 

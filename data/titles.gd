@@ -28,6 +28,7 @@ const DATA := {
 	"angie_otaku": {"name": "魔術オタク", "char": "angie", "desc": "魔術について語らせると三時間は止まらない。", "bonus": {"matk": 4}},
 	"angie_turncoat": {"name": "手のひら返しの達人", "char": "angie", "desc": "魔術資料の山に釣られて宿敵の作戦に乗った。後悔はしていない。", "bonus": {"tp": 15}},
 	"angie_prince": {"name": "白馬の王子様待ち", "char": "angie", "desc": "本物の王子を目の前にしても信じなかった。", "bonus": {"mdef": 4}},
+	"angie_bigsis": {"name": "お姉さんたちの約束", "char": "angie", "desc": "十七歳の隊長の頭を、ぐしゃぐしゃにした。", "bonus": {"def": 6, "mdef": 6}},
 	"angie_guts": {"name": "大義なき魔術師", "char": "angie", "desc": "大義なんかなくたって、守りたいものがあれば十分。", "bonus": {"matk": 10}},
 	# ---------- ソナ ----------
 	"sona_researcher": {"name": "自称研究員", "char": "sona", "desc": "塔の調査をしているらしい。らしい。", "bonus": {"atk": 3}},

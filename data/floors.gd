@@ -48,13 +48,13 @@ const DATA := [
 		"deco": "factory", "bg_top": Color(0.18, 0.12, 0.08), "bg_bottom": Color(0.42, 0.3, 0.16), "ground": Color(0.3, 0.24, 0.18), "accent": Color(1.0, 0.75, 0.3),
 		"groups": [["gear", "drone"], ["soldier", "drone", "drone"], ["gear", "gear"], ["gunner", "gunner", "soldier"]],
 		"elites": [["gear", "gear", "drone"], ["soldier", "mage_soldier", "gunner"]],
-		"boss": ["boss_zone", "soldier", "gunner"], "boss_hp": 0.5, "scale": 3.6,
+		"boss": ["boss_zone", "soldier", "gunner"], "boss_hp": 0.38, "scale": 3.6,
 	},
 	{
 		"name": "頂上 神の座", "sub": "認識が真実になる場所",
 		"deco": "summit", "bg_top": Color(0.3, 0.4, 0.75), "bg_bottom": Color(0.9, 0.82, 0.9), "ground": Color(0.85, 0.85, 0.9), "accent": Color(1.0, 0.95, 0.7),
 		"groups": [["soldier", "soldier", "gunner"], ["drone", "drone", "mage_soldier"]],
 		"elites": [["soldier", "mage_soldier", "gunner"]],
-		"boss": ["boss_shasta"], "boss_hp": 0.4, "scale": 4.0, "final": true,
+		"boss": ["boss_shasta"], "boss_hp": 0.36, "scale": 4.0, "final": true,
 	},
 ]

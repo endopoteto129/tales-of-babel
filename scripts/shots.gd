@@ -114,4 +114,33 @@ func _run() -> void:
 	main.goto("map", {})
 	await get_tree().create_timer(1.2).timeout
 	await shot("18_map_skit")
+	# ラスボスのとどめ演出
+	main.busy = false
+	Game.floor_num = 7
+	Game.flags["red_cape"] = true
+	Game.flags["nine_absent"] = true
+	main.goto("battle", {"enemies": ["boss_shasta"], "kind": "boss"})
+	await get_tree().create_timer(4.0).timeout
+	var bt = main.screen
+	var boss: Fighter = bt.enemies[0]
+	boss.hp = 5.0
+	boss.take_hit(100, 10, 0, 1, 1.0, false)
+	await get_tree().create_timer(1.5).timeout
+	await shot("19_finish_prompt")
+	bt.fire_finisher()
+	await get_tree().create_timer(2.8).timeout
+	await shot("20_finish_cutin")
+	await get_tree().create_timer(0.95).timeout
+	await shot("21_finish_shout")
+	await get_tree().create_timer(2.6).timeout
+	await shot("22_finish_name")
+	await get_tree().create_timer(2.0).timeout
+	await shot("23_finish_end")
+	# エンドロール後の場面
+	main.busy = false
+	var d2 = DB.Story.AFTER_CREDITS.duplicate()
+	d2["mode"] = "story"
+	main.play_dialogue(d2)
+	await get_tree().create_timer(3.0).timeout
+	await shot("24_after_credits")
 	get_tree().quit()

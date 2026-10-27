@@ -102,6 +102,11 @@ func _draw_body(col: Color, acc: Color, skin: Color) -> void:
 			UI.poly(self, PackedVector2Array([Vector2(-w + 10, 0), Vector2(-40, top - 10), Vector2(40, top - 10), Vector2(w - 10, 0)]), _darker(col, 0.8))
 		"nene":
 			UI.poly(self, PackedVector2Array([Vector2(-26, top - 2), Vector2(0, top + 26), Vector2(26, top - 2)]), Color(0.2, 0.1, 0.15))
+		"kaguya":
+			# 十二単風の重ね襟
+			for k in range(3):
+				var cc = [Color(1.0, 0.85, 0.4), Color(0.95, 0.95, 0.9), Color(0.5, 0.15, 0.3)][k]
+				UI.poly(self, PackedVector2Array([Vector2(-34 + k * 6, top - 2), Vector2(0, top + 50 - k * 10), Vector2(34 - k * 6, top - 2)]), cc)
 		"soldier":
 			draw_rect(Rect2(-w + 14, top + 6, 2 * w - 28, 24), Color(0.6, 0.62, 0.7))
 
@@ -195,7 +200,7 @@ func _draw_head(hair: Color, skin: Color) -> void:
 			# 顔の横に垂らした細い後れ毛
 			for side in [-1, 1]:
 				_lock(hc, side, r, 62.0, 9.0, 3.0, hair)
-		"nene", "sister":
+		"nene", "sister", "kaguya":
 			for side in [-1, 1]:
 				_lock(hc, side, r, 100.0, 14.0, 3.0, hair)
 		"jin":
@@ -218,7 +223,7 @@ func _draw_back_hair(hair: Color) -> void:
 		"angie":
 			length = 120.0
 			spread = 22.0
-		"nene", "sister":
+		"nene", "sister", "kaguya":
 			length = 104.0
 		"shasta":
 			length = 72.0
@@ -353,6 +358,10 @@ func _draw_extras(col: Color, acc: Color, hair: Color) -> void:
 				draw_circle(hc + Vector2(0, -r - 8), 5, Color(0.9, 0.2, 0.3))
 			else:
 				draw_rect(Rect2(hc + Vector2(-r, -6), Vector2(2 * r, 14)), Color(0.85, 0.85, 0.95))
+		"kaguya":
+			# 金のかんざし
+			draw_line(hc + Vector2(18, -r + 4), hc + Vector2(44, -r - 18), Color(1.0, 0.85, 0.35), 4.0)
+			draw_circle(hc + Vector2(44, -r - 18), 7, Color(1.0, 0.4, 0.5))
 		"nene":
 			# 大きなマスク
 			UI.poly(self, PackedVector2Array([hc + Vector2(-r + 2, 10), hc + Vector2(r - 2, 10), hc + Vector2(r - 10, 40), hc + Vector2(0, r + 4), hc + Vector2(-r + 10, 40)]), Color(0.95, 0.95, 0.97))

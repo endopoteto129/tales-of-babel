@@ -17,7 +17,7 @@ const DATA := {
 			{"startup": 0.06, "active": 0.10, "recovery": 0.14, "power": 1.0, "reach": 76, "knock": 60},
 			{"startup": 0.08, "active": 0.12, "recovery": 0.26, "power": 1.3, "reach": 82, "knock": 170},
 		],
-		"profile": "国王軍の兵士にして幹部のひとり。若くして幾度も死線を越えてきた。\n三年前、隊員全員を救えなかったことがトラウマで、「絶対」「必ず」といった言葉を極度に嫌う。\nおとなしいが冗談も言える。戦いになると表情が一変する。",
+		"profile": "17歳。国王軍の兵士にして幹部のひとり。若くして幾度も死線を越えてきた。\n三年前、隊員全員を救えなかったことがトラウマで、「絶対」「必ず」といった言葉を極度に嫌う。\nおとなしいが冗談も言える。戦いになると表情が一変する。",
 	},
 	"angie": {
 		"name": "アンジー", "full_name": "アンジー・ヴァルヴァンディ", "playable": true,
@@ -100,6 +100,8 @@ const DATA := {
 		"color": Color(0.45, 0.5, 0.6), "accent": Color(0.8, 0.8, 0.8), "hair": Color(0.3, 0.3, 0.3), "profile": ""},
 	"sister": {"name": "妹", "full_name": "博士の妹", "playable": false,
 		"color": Color(0.95, 0.95, 1.0), "accent": Color(0.7, 0.8, 1.0), "hair": Color(0.75, 0.75, 0.85), "profile": ""},
+	"kaguya": {"name": "カグヤ", "full_name": "アヅマ国の姫・カグヤ", "playable": false,
+		"color": Color(0.85, 0.25, 0.4), "accent": Color(1.0, 0.85, 0.4), "hair": Color(0.1, 0.08, 0.12), "profile": ""},
 	"towner": {"name": "異形の住人", "full_name": "異形の住人", "playable": false,
 		"color": Color(0.5, 0.75, 0.6), "accent": Color(0.9, 0.9, 0.6), "hair": Color(0.4, 0.6, 0.5), "profile": ""},
 }
