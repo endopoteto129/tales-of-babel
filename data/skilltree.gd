@@ -1,0 +1,60 @@
+# スキルツリー。SPを消費して習得する。pos はツリー表示の(列,行)。
+# effect: {"stat": {...}} ステータス加算 / {"arte": id} 術技習得 / {"skill": key} 戦闘スキル
+extends RefCounted
+
+const DATA := {
+	"ren": [
+		{"id": "h_atk1", "name": "剣の心得", "cost": 1, "pos": Vector2(1, 0), "req": [], "effect": {"stat": {"atk": 4}}, "desc": "攻撃力+4"},
+		{"id": "h_hp1", "name": "鍛錬", "cost": 1, "pos": Vector2(0, 1), "req": ["h_atk1"], "effect": {"stat": {"hp": 60}}, "desc": "最大HP+60"},
+		{"id": "h_akisasame", "name": "秋沙雨", "cost": 2, "pos": Vector2(1, 1), "req": ["h_atk1"], "effect": {"arte": "akisasame"}, "desc": "奥義「秋沙雨」を習得"},
+		{"id": "h_combo", "name": "四連斬", "cost": 2, "pos": Vector2(2, 1), "req": ["h_atk1"], "effect": {"skill": "combo_plus"}, "desc": "通常攻撃が1段増える"},
+		{"id": "h_def1", "name": "受け流し", "cost": 2, "pos": Vector2(0, 2), "req": ["h_hp1"], "effect": {"skill": "perfect_guard"}, "desc": "攻撃を受ける直前のガードでダメージ無効＆TP回復"},
+		{"id": "h_shishi", "name": "獅子戦吼", "cost": 3, "pos": Vector2(1, 2), "req": ["h_akisasame"], "effect": {"arte": "shishisenkou"}, "desc": "奥義「獅子戦吼」を習得"},
+		{"id": "h_crit", "name": "見切り", "cost": 2, "pos": Vector2(2, 2), "req": ["h_combo"], "effect": {"skill": "crit_up"}, "desc": "クリティカル率+10%"},
+		{"id": "h_souga", "name": "魔神剣・双牙", "cost": 3, "pos": Vector2(1, 3), "req": ["h_shishi"], "effect": {"arte": "souga"}, "desc": "奥義「魔神剣・双牙」を習得"},
+		{"id": "h_chain", "name": "連環の極意", "cost": 4, "pos": Vector2(1, 4), "req": ["h_souga"], "effect": {"skill": "chain_plus"}, "desc": "奥義から特技へ繋げられる"},
+	],
+	"angie": [
+		{"id": "m_matk1", "name": "魔力の素養", "cost": 1, "pos": Vector2(1, 0), "req": [], "effect": {"stat": {"matk": 5}}, "desc": "魔攻+5"},
+		{"id": "m_tp1", "name": "精神集中", "cost": 1, "pos": Vector2(0, 1), "req": ["m_matk1"], "effect": {"stat": {"tp": 25}}, "desc": "最大TP+25"},
+		{"id": "m_air", "name": "エアスラスト", "cost": 2, "pos": Vector2(1, 1), "req": ["m_matk1"], "effect": {"arte": "airthrust"}, "desc": "術「エアスラスト」を習得"},
+		{"id": "m_fast", "name": "高速詠唱", "cost": 2, "pos": Vector2(2, 1), "req": ["m_matk1"], "effect": {"skill": "fast_cast"}, "desc": "詠唱時間-20%"},
+		{"id": "m_regen", "name": "魔力循環", "cost": 2, "pos": Vector2(2, 3), "req": ["m_iron"], "effect": {"skill": "tp_regen"}, "desc": "TPが徐々に回復する"},
+		{"id": "m_matk2", "name": "古代語の理解", "cost": 2, "pos": Vector2(1, 2), "req": ["m_air"], "effect": {"stat": {"matk": 8}}, "desc": "魔攻+8"},
+		{"id": "m_iron", "name": "不動詠唱", "cost": 3, "pos": Vector2(2, 2), "req": ["m_fast"], "effect": {"skill": "iron_cast"}, "desc": "詠唱中に攻撃を受けても怯まない"},
+		{"id": "m_thunder", "name": "サンダーブレード", "cost": 3, "pos": Vector2(0, 3), "req": ["m_matk2"], "effect": {"arte": "thunderblade"}, "desc": "上級術「サンダーブレード」を習得"},
+		{"id": "m_barrier", "name": "バリアー", "cost": 2, "pos": Vector2(0, 2), "req": ["m_tp1"], "effect": {"arte": "barrier"}, "desc": "補助術「バリアー」を習得"},
+		{"id": "m_eruption", "name": "イラプション", "cost": 4, "pos": Vector2(1, 3), "req": ["m_matk2"], "effect": {"arte": "eruption"}, "desc": "上級術「イラプション」を習得"},
+	],
+	"sona": [
+		{"id": "s_atk1", "name": "射撃訓練", "cost": 1, "pos": Vector2(1, 0), "req": [], "effect": {"stat": {"atk": 4}}, "desc": "攻撃力+4"},
+		{"id": "s_stun", "name": "スタンバレット", "cost": 2, "pos": Vector2(0, 1), "req": ["s_atk1"], "effect": {"arte": "stunbullet"}, "desc": "特技「スタンバレット」を習得"},
+		{"id": "s_matk1", "name": "薬学知識", "cost": 1, "pos": Vector2(2, 1), "req": ["s_atk1"], "effect": {"stat": {"matk": 5}}, "desc": "魔攻+5（回復量アップ）"},
+		{"id": "s_field", "name": "メディカルフィールド", "cost": 3, "pos": Vector2(2, 2), "req": ["s_matk1"], "effect": {"arte": "medicalfield"}, "desc": "回復術「メディカルフィールド」を習得"},
+		{"id": "s_ray", "name": "レイバレット", "cost": 3, "pos": Vector2(0, 2), "req": ["s_stun"], "effect": {"arte": "raybullet"}, "desc": "奥義「レイバレット」を習得"},
+		{"id": "s_regen", "name": "冷静沈着", "cost": 2, "pos": Vector2(1, 2), "req": ["s_atk1"], "effect": {"skill": "tp_regen"}, "desc": "TPが徐々に回復する"},
+		{"id": "s_revive", "name": "リヴァイブバレット", "cost": 3, "pos": Vector2(2, 3), "req": ["s_field"], "effect": {"arte": "revivebullet"}, "desc": "回復術「リヴァイブバレット」を習得"},
+		{"id": "s_deadly", "name": "デッドリーエイム", "cost": 4, "pos": Vector2(0, 3), "req": ["s_ray"], "effect": {"arte": "deadlyaim"}, "desc": "奥義「デッドリーエイム」を習得"},
+		{"id": "s_crit", "name": "急所狙い", "cost": 2, "pos": Vector2(1, 3), "req": ["s_regen"], "effect": {"skill": "crit_up"}, "desc": "クリティカル率+10%"},
+	],
+	"jin": [
+		{"id": "j_agi1", "name": "抜刀術", "cost": 1, "pos": Vector2(1, 0), "req": [], "effect": {"stat": {"atk": 4, "agi": 2}}, "desc": "攻撃力+4 素早さ+2"},
+		{"id": "j_taketori", "name": "竹取一閃", "cost": 2, "pos": Vector2(1, 1), "req": ["j_agi1"], "effect": {"arte": "taketori"}, "desc": "奥義「竹取一閃」を習得"},
+		{"id": "j_hp1", "name": "したたかさ", "cost": 1, "pos": Vector2(0, 1), "req": ["j_agi1"], "effect": {"stat": {"hp": 60}}, "desc": "最大HP+60"},
+		{"id": "j_combo", "name": "四の太刀", "cost": 2, "pos": Vector2(2, 1), "req": ["j_agi1"], "effect": {"skill": "combo_plus"}, "desc": "通常攻撃が1段増える"},
+		{"id": "j_ryuu", "name": "龍の首の珠", "cost": 3, "pos": Vector2(0, 2), "req": ["j_taketori"], "effect": {"arte": "ryuunotama"}, "desc": "奥義「龍の首の珠」を習得"},
+		{"id": "j_hourai", "name": "蓬莱の玉の枝", "cost": 3, "pos": Vector2(2, 2), "req": ["j_taketori"], "effect": {"arte": "hourai"}, "desc": "奥義「蓬莱の玉の枝」を習得"},
+		{"id": "j_crit", "name": "糸目の慧眼", "cost": 2, "pos": Vector2(1, 2), "req": ["j_taketori"], "effect": {"skill": "crit_up"}, "desc": "クリティカル率+10%"},
+		{"id": "j_chain", "name": "五宝連環", "cost": 4, "pos": Vector2(1, 3), "req": ["j_crit"], "effect": {"skill": "chain_plus"}, "desc": "奥義から特技へ繋げられる"},
+	],
+	"john": [
+		{"id": "b_hp1", "name": "鋼の肉体", "cost": 1, "pos": Vector2(1, 0), "req": [], "effect": {"stat": {"hp": 80}}, "desc": "最大HP+80"},
+		{"id": "b_atk1", "name": "拳の極意", "cost": 1, "pos": Vector2(0, 1), "req": ["b_hp1"], "effect": {"stat": {"atk": 5}}, "desc": "攻撃力+5"},
+		{"id": "b_bakusai", "name": "爆砕掌", "cost": 2, "pos": Vector2(1, 1), "req": ["b_hp1"], "effect": {"arte": "bakusaishou"}, "desc": "奥義「爆砕掌」を習得"},
+		{"id": "b_def1", "name": "鉄の守り", "cost": 1, "pos": Vector2(2, 1), "req": ["b_hp1"], "effect": {"stat": {"def": 6}}, "desc": "防御力+6"},
+		{"id": "b_combo", "name": "五連撃", "cost": 2, "pos": Vector2(0, 2), "req": ["b_atk1"], "effect": {"skill": "combo_plus"}, "desc": "通常攻撃が1段増える"},
+		{"id": "b_shikou", "name": "獅吼爆砕陣", "cost": 3, "pos": Vector2(1, 2), "req": ["b_bakusai"], "effect": {"arte": "shikou"}, "desc": "奥義「獅吼爆砕陣」を習得"},
+		{"id": "b_guard", "name": "見切りの構え", "cost": 2, "pos": Vector2(2, 2), "req": ["b_def1"], "effect": {"skill": "perfect_guard"}, "desc": "攻撃を受ける直前のガードでダメージ無効＆TP回復"},
+		{"id": "b_chain", "name": "闘気連環", "cost": 4, "pos": Vector2(1, 3), "req": ["b_shikou"], "effect": {"skill": "chain_plus"}, "desc": "奥義から特技へ繋げられる"},
+	],
+}
