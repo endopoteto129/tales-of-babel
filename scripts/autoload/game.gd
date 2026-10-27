@@ -72,7 +72,7 @@ func controls_text(battle_only: bool = false) -> String:
 		if not battle_only:
 			t += "\n\n[b]マップ[/b]\n左右でルート選択、A で進む。スキット：BACK　メニュー：START"
 	else:
-		t = "[b]バトル（キーボード）[/b]\n移動：A/D・←→　通常攻撃：J（Z）\n術技：K（X）＋方向なし/↑/↓/←→で4種\nジャンプ：Space（C）　ガード：L（Shift）　ガード中に←→でステップ\nターゲット切替：Tab（Q）　共鳴秘技：U（V）（絆ゲージ満タン時）\nオーバーリミッツ：I（B）（OVLゲージ満タン時）\n秘奥義：オーバーリミッツ中に I（秘奥義ゲージ100%以上）\n仲間に術技を指示：1/2/3　メニュー：Esc"
+		t = "[b]バトル（キーボード）[/b]\n移動：A/D・←→　通常攻撃：J（Z）\n術技：K（X）＋方向なし/↑/↓/←→で4種\nジャンプ：Space（C）　ガード：L（Shift）　ガード中に←→でステップ\nターゲット切替：Tab（Q）　共鳴秘技：U（V）（絆ゲージ満タン時）\nオーバーリミッツ：I（B）（OVLゲージ満タン時）\n秘奥義：オーバーリミッツ中に I（秘奥義ゲージ100%以上）\n仲間に術技を指示：1/2/3　メニュー：Esc\n（デバッグ：F9 で敵のHPを残り10に）"
 		if not battle_only:
 			t += "\n\n[b]マップ[/b]\n←→でルート選択、Enter で進む。スキット：T　メニュー：M"
 	t += "\n\n[b]テイルズ流のコツ[/b]\n通常攻撃 → 特技 → 奥義 の順にキャンセルして繋げよう。\n仲間と同じ敵を叩くと「連携」で絆ゲージが一気にたまる。\n秘奥義ゲージは戦闘をまたいで300%までたまる。200%で2人、300%で3人の合体秘奥義になる。"
@@ -210,13 +210,34 @@ func join(cid: String) -> void:
 func active_party() -> Array:
 	var res: Array = []
 	for m in party:
-		if m.get("active", true) and res.size() < 4:
+		if m.get("active", true) and res.size() < 4 and not captured(m["id"]):
 			res.append(m)
+	if res.is_empty() and not party.is_empty():
+		res.append(party[0])
 	return res
 
 
+# 頂上：レンが突き落とされてから決戦直前まで、仲間は王子に捕らわれている
+func captured(cid: String) -> bool:
+	return flags.get("allies_captured", false) and cid != "ren"
+
+
+# いま一緒にいる仲間（捕らわれている仲間を除く）
+func present_party() -> Array:
+	return party.filter(func(m) -> bool: return not captured(m["id"]))
+
+
+# 捕らわれている仲間がしゃべる場面は、合流するまで出さない
+func lines_available(lines: Array) -> bool:
+	for ln in lines:
+		var sp = str(ln[0])
+		if captured(sp) and DB.Characters.DATA.has(sp) and DB.chara(sp).get("playable", false):
+			return false
+	return true
+
+
 func is_joined(cid: String) -> bool:
-	return not member(cid).is_empty()
+	return not member(cid).is_empty() and not captured(cid)
 
 
 func member(cid: String) -> Dictionary:
@@ -437,7 +458,7 @@ func check_skits(trigger: String) -> void:
 		for f in s.get("not_flags", []):
 			if flags.get(f, false):
 				ok = false
-		if not ok:
+		if not ok or not lines_available(s["lines"]):
 			continue
 		pending_skits.append(sid)
 		skit_available.emit(sid)
@@ -765,6 +786,8 @@ func _debug_apply_story(sid: String) -> void:
 				award_title(line[1], line[2] if line.size() > 2 else "")
 			"@flag":
 				flags[line[1]] = true
+			"@unflag":
+				flags.erase(line[1])
 			"@item":
 				add_item(line[1], line[2] if line.size() > 2 else 1)
 			"@recipe":

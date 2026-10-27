@@ -232,6 +232,8 @@ func _command(line: Array, skipping: bool) -> bool:
 			Game.award_title(line[1], line[2] if line.size() > 2 else "")
 		"@flag":
 			Game.flags[line[1]] = true
+		"@unflag":
+			Game.flags.erase(line[1])
 		"@buff":
 			Game.add_floor_buff(line[1])
 		"@item":

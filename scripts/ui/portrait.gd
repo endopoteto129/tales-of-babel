@@ -303,6 +303,9 @@ func _draw_face(skin: Color) -> void:
 		elif expr == "surprise":
 			draw_circle(p, 9, Color.WHITE)
 			draw_circle(p, 5, eye_col)
+		elif expr == "blank":
+			# 心が薄れた、光のない目
+			draw_circle(p, 8, eye_col.lerp(Color(0.45, 0.45, 0.5), 0.6).darkened(0.3))
 		elif expr == "serious" or expr == "cold":
 			draw_rect(Rect2(p + Vector2(-9, -3), Vector2(18, 7)), eye_col)
 			draw_line(p + Vector2(-10, -12), p + Vector2(10, -11), Color(0.2, 0.15, 0.15), 3.0)

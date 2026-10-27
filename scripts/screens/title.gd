@@ -39,6 +39,7 @@ func _ready() -> void:
 	menu.add_child(UI.button("操作説明", _show_help, 24))
 	# エディタから実行したとき（デバッグビルド）だけ表示
 	menu.add_child(UI.button("デバッグ：層を選んで始める", _show_debug, 20))
+	menu.add_child(UI.button("デバッグ：シナリオ・スキットを見る", _show_scene_list, 20))
 	if not OS.has_feature("web"):
 		menu.add_child(UI.button("終了", func() -> void: get_tree().quit(), 24))
 	UI.focus_first(menu)
@@ -153,6 +154,91 @@ func _show_debug() -> void:
 		help = null
 		UI.focus_first(menu)))
 	UI.focus_first(grid)
+
+
+# ------------------------------------------------------------ デバッグ：シナリオ・スキット再生
+var scene_tab := "story"
+
+
+func _show_scene_list() -> void:
+	if help:
+		help.queue_free()
+	help = UI.panel(Color(0.05, 0.05, 0.1, 0.98), UI.C_GOLD)
+	help.position = Vector2(140, 30)
+	help.custom_minimum_size = Vector2(1000, 0)
+	add_child(help)
+	var v = VBoxContainer.new()
+	v.add_theme_constant_override("separation", 8)
+	help.add_child(v)
+	v.add_child(UI.label("デバッグ：シナリオ・スキットを見る", 28, UI.C_GOLD, true))
+	v.add_child(UI.label("好きな場面を再生できます。再生してもセーブデータには影響しません。", 16, UI.C_DIM))
+	var tabs = HBoxContainer.new()
+	tabs.add_theme_constant_override("separation", 8)
+	v.add_child(tabs)
+	var first_tab: Control = null
+	for tb in [["story", "メインシナリオ"], ["skit", "スキット"], ["camp", "焚火の会話"]]:
+		var key: String = tb[0]
+		var b = UI.button(tb[1], func() -> void:
+			scene_tab = key
+			_show_scene_list(), 18)
+		if key == scene_tab:
+			b.add_theme_color_override("font_color", UI.C_GOLD)
+			first_tab = b
+		tabs.add_child(b)
+	var sc = ScrollContainer.new()
+	sc.custom_minimum_size = Vector2(1000, 480)
+	sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	v.add_child(sc)
+	var lv = VBoxContainer.new()
+	lv.add_theme_constant_override("separation", 4)
+	sc.add_child(lv)
+	for e in _scene_entries():
+		var data: Dictionary = e[1]
+		var mode: String = e[2]
+		var b2 = UI.button(e[0], func() -> void: _play_scene(data, mode), 16)
+		b2.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		lv.add_child(b2)
+	v.add_child(UI.button("閉じる", func() -> void:
+		help.queue_free()
+		help = null
+		UI.focus_first(menu)))
+	if first_tab:
+		first_tab.grab_focus()
+
+
+func _scene_entries() -> Array:
+	var res: Array = []
+	match scene_tab:
+		"story":
+			for id in DB.Story.DATA:
+				res.append(["%s　%s" % [id, DB.Story.DATA[id]["title"]], DB.Story.DATA[id], "story"])
+			res.append(["after_credits　%s" % DB.Story.AFTER_CREDITS["title"], DB.Story.AFTER_CREDITS, "story"])
+		"skit":
+			for id in DB.Skits.DATA:
+				var sk: Dictionary = DB.Skits.DATA[id]
+				var where = "%d層" % sk["floor"] if sk.has("floor") else "%d層〜" % sk.get("min_floor", 1)
+				res.append(["%s　%s（%s）" % [id, sk["title"], where], sk, "skit"])
+		"camp":
+			for id in DB.Skits.CAMP:
+				var c: Dictionary = DB.Skits.CAMP[id]
+				res.append(["%s　%s（%d層〜）" % [id, c["title"], c.get("min_floor", 1)], c, "camp"])
+	return res
+
+
+func _play_scene(data: Dictionary, mode: String) -> void:
+	# 場面の中の加入・称号・フラグは一時的なもの。終わったら状態を作り直す。
+	Game.quiet = true
+	var d: Dictionary = data.duplicate()
+	d["mode"] = mode
+	if mode == "camp":
+		d["bg"] = "camp"
+	help.visible = false
+	Main.inst.play_dialogue(d, func() -> void:
+		Game.new_game()
+		Game.quiet = false
+		if is_instance_valid(help):
+			help.visible = true
+			_show_scene_list())
 
 
 func _debug_jump(f: int, at_boss: bool) -> void:

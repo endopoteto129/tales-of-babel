@@ -603,6 +603,9 @@ func _pause_main() -> void:
 		battle.escape())
 	esc.disabled = battle.kind == "boss" or battle.params.get("no_escape", false)
 	v.add_child(esc)
+	v.add_child(UI.button("デバッグ：敵のHPを残り10に", func() -> void:
+		_close_pause()
+		battle.debug_enemies_to_10(), 17))
 	v.add_child(UI.button("戦闘に戻る", _close_pause))
 	UI.focus_first(v)
 

@@ -1,7 +1,7 @@
 # データ整合性チェック（自動テストから呼ぶ）。会話の話者・表情、イベント結果の参照先などを検証する。
 extends RefCounted
 
-const EXPRS := ["", "smile", "laugh", "angry", "sad", "cry", "surprise", "serious", "cold", "think", "sweat", "blush"]
+const EXPRS := ["", "smile", "laugh", "angry", "sad", "cry", "surprise", "serious", "cold", "think", "sweat", "blush", "blank"]
 const RESULT_KEYS := ["gald", "item", "count", "hp", "tp", "buff", "exp", "recipe", "title", "bond", "sp", "msg", "battle", "lines", "chance", "success", "fail"]
 const CHAT_KEYS := ["req", "lines", "who", "by", "boss", "floor", "floor_min", "floor_max", "flags", "not_flags"]
 

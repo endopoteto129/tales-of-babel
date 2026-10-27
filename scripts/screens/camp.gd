@@ -84,7 +84,7 @@ func _draw() -> void:
 		var a2: float = 1.0 - s2[2] / s2[3]
 		draw_circle(s2[0], 2.0, Color(1.0, 0.7, 0.3, a2))
 	# 焚火を囲む仲間（シルエット）
-	var members: Array = Game.party.map(func(m) -> String: return m["id"])
+	var members: Array = Game.present_party().map(func(m) -> String: return m["id"])
 	if not Game.flags.get("nine_absent", false):
 		members.append("nine")
 	var n = members.size()
@@ -147,7 +147,7 @@ func _cook(rid: String) -> void:
 	locked = true
 	var r: Dictionary = DB.Items.RECIPES[rid]
 	# 料理担当はランダム。得意なキャラが作ると4戦持つ。
-	var cooks: Array = Game.party.map(func(m) -> String: return m["id"])
+	var cooks: Array = Game.present_party().map(func(m) -> String: return m["id"])
 	var cook: String = cooks[Game.rng.randi() % cooks.size()]
 	var best: bool = r["best"] == cook
 	Game.meal = {"id": rid, "left": 4 if best else 3}
@@ -180,7 +180,7 @@ func _pick_talk() -> String:
 		for f in s.get("flags", []):
 			if not Game.flags.get(f, false):
 				ok = false
-		if ok:
+		if ok and Game.lines_available(s["lines"]):
 			return id
 	return ""
 

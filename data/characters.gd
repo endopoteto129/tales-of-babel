@@ -50,7 +50,7 @@ const DATA := {
 		"profile": "一人で塔を調査しているという自称研究員。\nその正体は、レンが救えなかった部下の姉。王国から、レンが裏切ったときは殺せと命じられている。",
 	},
 	"jin": {
-		"name": "ジン", "full_name": "珠枝ジン", "playable": true,
+		"name": "ジン", "full_name": "藤林ジン", "playable": true,
 		"color": Color(0.2, 0.3, 0.55), "accent": Color(0.95, 0.85, 0.5), "hair": Color(0.12, 0.12, 0.16),
 		"role": "melee", "weapon": "katana",
 		"base": {"hp": 400, "tp": 95, "atk": 34, "def": 18, "matk": 22, "mdef": 18, "agi": 24},

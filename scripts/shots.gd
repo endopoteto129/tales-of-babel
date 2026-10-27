@@ -136,11 +136,44 @@ func _run() -> void:
 	await shot("22_finish_name")
 	await get_tree().create_timer(2.0).timeout
 	await shot("23_finish_end")
-	# エンドロール後の場面
+	# デバッグ：敵HPを10に
 	main.busy = false
-	var d2 = DB.Story.AFTER_CREDITS.duplicate()
-	d2["mode"] = "story"
-	main.play_dialogue(d2)
+	Game.floor_num = 6
+	Game.flags["red_cape"] = false
+	Game.flags["nine_absent"] = false
+	main.goto("battle", {"enemies": ["soldier", "soldier", "gunner"], "kind": "battle"})
 	await get_tree().create_timer(3.0).timeout
-	await shot("24_after_credits")
+	main.screen.debug_enemies_to_10()
+	await get_tree().create_timer(0.4).timeout
+	await shot("25_debug_hp10")
+	# 無表情になったナイン
+	main.busy = false
+	main.goto("map", {})
+	await get_tree().create_timer(0.8).timeout
+	main.play_dialogue({"mode": "story", "bg": "rec", "lines": [["nine", "…………。", "blank"]]})
+	await get_tree().create_timer(2.0).timeout
+	await shot("26_nine_blank")
+	for c in main.overlay.get_children():
+		c.queue_free()
+	# 博士がレンをかばう
+	main.play_dialogue({"mode": "story", "bg": "black", "lines": [["maria", "…………させないよ。", "cry"]]})
+	await get_tree().create_timer(2.0).timeout
+	await shot("27_maria_shield")
+	for c in main.overlay.get_children():
+		c.queue_free()
+	# タイトルのシナリオ再生メニュー
+	main.busy = false
+	main.goto("title", {})
+	await get_tree().create_timer(1.0).timeout
+	main.screen._show_scene_list()
+	await get_tree().create_timer(0.5).timeout
+	await shot("28_debug_scenes")
+	# 最後の「塔と太陽」
+	main.busy = false
+	main.goto("ending", {})
+	await get_tree().create_timer(0.5).timeout
+	main.screen.done = true
+	main.screen._final_shot()
+	await get_tree().create_timer(3.0).timeout
+	await shot("29_final_tower")
 	get_tree().quit()

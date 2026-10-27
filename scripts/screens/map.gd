@@ -228,7 +228,7 @@ func _refresh() -> void:
 	side.add_child(UI.label(fd["name"], 22, fd["accent"], true))
 	side.add_child(UI.label(fd["sub"], 15, UI.C_DIM))
 	side.add_child(HSeparator.new())
-	for m in Game.party:
+	for m in Game.present_party():
 		var hb = HBoxContainer.new()
 		var nm = UI.label("%s Lv%d" % [DB.cname(m["id"]), m["level"]], 17, DB.ccolor(m["id"]).lightened(0.3), true)
 		nm.custom_minimum_size = Vector2(130, 0)

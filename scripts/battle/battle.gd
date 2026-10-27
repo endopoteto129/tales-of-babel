@@ -234,6 +234,18 @@ func _unhandled_input(event: InputEvent) -> void:
 			hud.toggle_pause()
 		get_viewport().set_input_as_handled()
 		return
+	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_F9:
+		debug_enemies_to_10()
+		get_viewport().set_input_as_handled()
+
+
+# デバッグ：生きている敵全員のHPを一気に残り10にする（F9、またはメニューから）
+func debug_enemies_to_10() -> void:
+	for e in enemies:
+		if e.alive() and not e.held:
+			e.hp = min(e.hp, 10.0)
+			popup_text(e.head() + Vector2(0, -30), "DEBUG HP→10", Color(1.0, 0.5, 1.0), 18)
+	Sfx.play("confirm")
 
 
 # ターゲット切替・共鳴秘技・仲間への指示。スティックやトリガーも1回押しとして扱うため毎フレーム確認する

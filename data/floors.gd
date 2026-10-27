@@ -6,6 +6,9 @@ extends RefCounted
 const ENEMY_HP_MULT := 1.6
 const ENEMY_POWER_MULT := 1.45
 const BOSS_POWER_MULT := 0.65
+# 頂上でレンがひとりで戦うとき（仲間が捕らわれている間）の敵の倍率
+const SOLO_HP_MULT := 0.4
+const SOLO_POWER_MULT := 0.35
 
 const DATA := [
 	{
@@ -53,7 +56,7 @@ const DATA := [
 	{
 		"name": "頂上 神の座", "sub": "認識が真実になる場所",
 		"deco": "summit", "bg_top": Color(0.3, 0.4, 0.75), "bg_bottom": Color(0.9, 0.82, 0.9), "ground": Color(0.85, 0.85, 0.9), "accent": Color(1.0, 0.95, 0.7),
-		"groups": [["soldier", "soldier", "gunner"], ["drone", "drone", "mage_soldier"]],
+		"groups": [["soldier", "soldier", "gunner"], ["soldier", "soldier", "mage_soldier"]],
 		"elites": [["soldier", "mage_soldier", "gunner"]],
 		"boss": ["boss_shasta"], "boss_hp": 0.36, "scale": 4.0, "final": true,
 	},

@@ -136,6 +136,10 @@ func setup_enemy(b: Node, eid: String, scale: float) -> void:
 	if data.get("boss", false):
 		hp_scale *= DB.floor_data(Game.floor_num).get("boss_hp", 1.0)
 		pow_scale *= DB.Floors.BOSS_POWER_MULT
+	if Game.flags.get("allies_captured", false):
+		# 頂上の一本道はレンひとり。ナインの「ヒーローは負けない」という認識が敵を弱らせている
+		hp_scale *= DB.Floors.SOLO_HP_MULT
+		pow_scale *= DB.Floors.SOLO_POWER_MULT
 	max_hp = st["hp"] * hp_scale
 	hp = max_hp
 	atk = st["atk"] * pow_scale

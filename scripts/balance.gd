@@ -28,6 +28,8 @@ func _run() -> void:
 			fights = [fights[-1]]
 		for fi in fights:
 			Game.debug_setup(f, fi[2])
+			if fi[2]:
+				Game._debug_apply_story(DB.Story.FLOORS[f]["boss_pre"])
 			if not fi[2]:
 				Game._debug_apply_story(DB.Story.FLOORS[f]["intro"])
 				for m in Game.party:
