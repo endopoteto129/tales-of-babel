@@ -70,7 +70,19 @@ func _arrive() -> void:
 		await _floor_start()
 	Game.save_game()
 	_refresh()
+	await _map_tutorials()
 	locked = false
+
+
+func _map_tutorials() -> void:
+	if Game.should_tutorial("map"):
+		await Main.inst.show_tutorial("map")
+	if Game.party.any(func(m) -> bool: return m["sp"] > 0) and Game.should_tutorial("menu"):
+		await Main.inst.show_tutorial("menu")
+	if Game.party.size() >= 5 and Game.should_tutorial("formation"):
+		await Main.inst.show_tutorial("formation")
+	if not Game.pending_skits.is_empty() and Game.should_tutorial("skit"):
+		await Main.inst.show_tutorial("skit")
 
 
 func _floor_start() -> void:
@@ -151,6 +163,8 @@ func _buff_choice(title: String, n: int) -> void:
 	var opts: Array = Game.random_buffs(n)
 	if opts.is_empty():
 		return
+	if Game.should_tutorial("buff"):
+		await Main.inst.show_tutorial("buff")
 	var picked = [""]
 	var layer = Control.new()
 	UI.full(layer)

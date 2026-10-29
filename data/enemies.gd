@@ -176,7 +176,7 @@ const DATA := {
 	},
 	"boss_val": {
 		"name": "幹部ヴァル", "shape": "humanoid", "weapon": "rod", "color": Color(0.3, 0.25, 0.45), "size": Vector2(54, 104),
-		"stats": {"hp": 7200, "atk": 30, "def": 22, "matk": 34, "mdef": 36, "agi": 18},
+		"stats": {"hp": 7200, "atk": 30, "def": 22, "matk": 24, "mdef": 36, "agi": 18},
 		"ai": "boss", "speed": 110, "armor": 140, "boss": true, "weak": [], "resist": ["thunder"], "exp": 900, "gald": 800,
 		"attacks": [
 			{"name": "魔学砲", "range": 900, "windup": 0.8, "active": 0.1, "recovery": 0.6, "power": 0.9, "magic": true,

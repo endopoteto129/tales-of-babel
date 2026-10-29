@@ -9,6 +9,7 @@ var flip := false
 var dim := false
 var bob := 0.0
 var _t := 0.0
+static var _tex_cache: Dictionary = {}
 
 
 func setup(id: String, expression: String = "", flipped: bool = false) -> void:
@@ -25,6 +26,18 @@ func _process(delta: float) -> void:
 
 func _draw() -> void:
 	if cid == "" or not DB.Characters.DATA.has(cid):
+		return
+	var tex := _image()
+	if tex:
+		# 立ち絵画像があれば、それを足元合わせで描く（無ければ下の図形で描く）
+		var k: float = min(size.x / tex.get_width(), size.y / tex.get_height())
+		var sz: Vector2 = tex.get_size() * k
+		var pos := Vector2((size.x - sz.x) / 2.0, size.y - sz.y + sin(_t * 2.0) * 1.5 + bob)
+		if flip:
+			# 幅をマイナスにすると左右反転で描ける
+			pos.x += sz.x
+			sz.x = -sz.x
+		draw_texture_rect(tex, Rect2(pos, sz), false)
 		return
 	var c: Dictionary = DB.chara(cid)
 	var s: float = min(size.x / 220.0, size.y / 260.0)
@@ -46,6 +59,20 @@ func _draw() -> void:
 	draw_set_transform(Vector2.ZERO)
 	if dim:
 		draw_rect(Rect2(Vector2.ZERO, size), Color(0, 0, 0, 0.0))
+
+
+# assets/portraits/<キャラID>/<表情>.png。表情の画像が無ければ normal.png を使う
+func _image() -> Texture2D:
+	var key := cid + "/" + expr
+	if not _tex_cache.has(key):
+		var tex: Texture2D = null
+		for e in [expr if expr != "" else "normal", "normal"]:
+			var path := "res://assets/portraits/%s/%s.png" % [cid, e]
+			if ResourceLoader.exists(path):
+				tex = load(path)
+				break
+		_tex_cache[key] = tex
+	return _tex_cache[key]
 
 
 func _darker(c: Color, f: float = 0.7) -> Color:
@@ -117,6 +144,17 @@ func _head_r() -> float:
 	if cid == "john":
 		return 50.0
 	return 48.0
+
+
+# 顔の中心（このコントロール内の座標）。吹き出しの顔アイコンの切り抜きに使う
+func face_point() -> Vector2:
+	var tex := _image()
+	if tex:
+		var k: float = min(size.x / tex.get_width(), size.y / tex.get_height())
+		return Vector2(size.x / 2.0, size.y - tex.get_height() * k * 0.78)
+	var s: float = min(size.x / 220.0, size.y / 260.0)
+	var hc := _head_c() if cid != "pots" else Vector2(0, -130)
+	return Vector2(size.x / 2.0, size.y) + hc * s
 
 
 func _head_c() -> Vector2:

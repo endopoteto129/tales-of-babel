@@ -20,9 +20,11 @@ func _ready() -> void:
 	menu.custom_minimum_size = Vector2(360, 0)
 	menu.add_theme_constant_override("separation", 10)
 	add_child(menu)
-	# 層ごとの「キャンプ記録」（ストーリー）を最初に再生
+	# 層ごとの「キャンプ記録」（ストーリー）を最初に再生。
+	# 中盤のストーリーマスより後の出来事なので、そこを通るまでは流さない（加入前の仲間が出てしまうため）
 	var fs: Dictionary = DB.Story.FLOORS.get(Game.floor_num, {})
-	if fs.has("camp") and not Game.flags.get("story_" + fs["camp"], false):
+	var mid_done: bool = not fs.has("mid") or Game.flags.get("story_" + fs["mid"], false)
+	if fs.has("camp") and mid_done and not Game.flags.get("story_" + fs["camp"], false):
 		locked = true
 		Main.inst.play_story(fs["camp"], func() -> void:
 			locked = false
@@ -32,6 +34,8 @@ func _ready() -> void:
 
 
 func _build_menu() -> void:
+	if Game.should_tutorial("camp"):
+		await Main.inst.show_tutorial("camp")
 	for c in menu.get_children():
 		c.queue_free()
 	menu.add_child(UI.label("どうする？（ひとつだけ選べる）", 20, UI.C_TEXT, true))

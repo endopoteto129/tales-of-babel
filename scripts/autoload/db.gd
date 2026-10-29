@@ -16,6 +16,8 @@ const Story := preload("res://data/story.gd")
 const Links := preload("res://data/links.gd")
 const Mystics := preload("res://data/mystics.gd")
 const Finishers := preload("res://data/finishers.gd")
+const Callouts := preload("res://data/callouts.gd")
+const Tutorials := preload("res://data/tutorials.gd")
 
 const ELEMENT_NAME := {"fire": "火", "ice": "氷", "wind": "風", "thunder": "雷", "light": "光", "earth": "地"}
 

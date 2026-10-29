@@ -120,6 +120,41 @@ func _on_notified(text: String, kind: String) -> void:
 	toast(text, kind)
 
 
+# チュートリアルを表示し、閉じられるまで待つ
+func show_tutorial(id: String) -> void:
+	var layer = Control.new()
+	UI.full(layer)
+	overlay.add_child(layer)
+	var dim = ColorRect.new()
+	dim.color = Color(0, 0, 0, 0.6)
+	UI.full(dim)
+	layer.add_child(dim)
+	var p = UI.panel(Color(0.05, 0.07, 0.14, 0.98), UI.C_GOLD)
+	p.position = Vector2(240, 110)
+	p.custom_minimum_size = Vector2(800, 0)
+	layer.add_child(p)
+	var v = VBoxContainer.new()
+	v.add_theme_constant_override("separation", 12)
+	p.add_child(v)
+	v.add_child(UI.label("TUTORIAL", 16, UI.C_DIM, true))
+	v.add_child(UI.label(DB.Tutorials.DATA[id]["title"], 30, UI.C_GOLD, true))
+	var body = UI.rich(DB.Tutorials.text_of(id), 20)
+	body.custom_minimum_size = Vector2(760, 0)
+	v.add_child(body)
+	v.add_child(UI.label("あとからメニューの「チュートリアル」で読み返せます。", 15, UI.C_DIM))
+	var ok = UI.button("わかった", func() -> void: pass, 22)
+	v.add_child(ok)
+	Sfx.play("confirm", 1.2)
+	layer.modulate.a = 0.0
+	layer.create_tween().tween_property(layer, "modulate:a", 1.0, 0.15)
+	get_viewport().gui_release_focus()
+	await get_tree().create_timer(0.35).timeout
+	ok.grab_focus()
+	await ok.pressed
+	Sfx.play("cancel")
+	layer.queue_free()
+
+
 func toast(text: String, kind: String = "info") -> void:
 	var col = UI.C_TEXT
 	match kind:
@@ -137,6 +172,8 @@ func toast(text: String, kind: String = "info") -> void:
 	var l = UI.label(text, 18, col)
 	p.add_child(l)
 	p.modulate.a = 0.0
+	# バトル中は上のターン表示やボスのHPバーと重ならないよう下げる
+	toast_box.position.y = 140.0 if screen and screen.has_method("is_enemy_turn") else 14.0
 	toast_box.add_child(p)
 	var tw = p.create_tween()
 	tw.tween_property(p, "modulate:a", 1.0, 0.2)

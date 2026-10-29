@@ -168,6 +168,30 @@ func _run() -> void:
 	main.screen._show_scene_list()
 	await get_tree().create_timer(0.5).timeout
 	await shot("28_debug_scenes")
+	# 敵のターン（仲間の声かけ）
+	main.busy = false
+	Game.floor_num = 2
+	main.goto("battle", {"enemies": ["soldier", "soldier"], "kind": "battle"})
+	await get_tree().create_timer(2.0).timeout
+	main.screen._start_enemy_turn()
+	await get_tree().create_timer(1.6).timeout
+	await shot("30_enemy_turn")
+	# チュートリアル
+	main.show_tutorial("enemy_turn")
+	await get_tree().create_timer(0.6).timeout
+	await shot("31_tutorial")
+	for c in main.overlay.get_children():
+		if c != main.toast_box:
+			c.queue_free()
+	main.busy = false
+	Game.flags["tut_battle"] = true
+	Game.flags["tut_enemy_turn"] = true
+	main.goto("menu", {"back": "map"})
+	await get_tree().create_timer(0.5).timeout
+	main.screen.tab = 6
+	main.screen._rebuild()
+	await get_tree().create_timer(0.5).timeout
+	await shot("32_menu_tutorial")
 	# 最後の「塔と太陽」
 	main.busy = false
 	main.goto("ending", {})

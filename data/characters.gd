@@ -98,6 +98,8 @@ const DATA := {
 		"color": Color(0.3, 0.32, 0.3), "accent": Color(0.8, 0.7, 0.3), "hair": Color(0.2, 0.2, 0.2), "profile": ""},
 	"soldier": {"name": "王国兵", "full_name": "王国兵", "playable": false,
 		"color": Color(0.45, 0.5, 0.6), "accent": Color(0.8, 0.8, 0.8), "hair": Color(0.3, 0.3, 0.3), "profile": ""},
+	"rio": {"name": "リオ", "full_name": "リオ・リソア", "playable": false,
+		"color": Color(0.4, 0.5, 0.45), "accent": Color(0.8, 0.85, 0.7), "hair": Color(0.25, 0.4, 0.45), "profile": ""},
 	"sister": {"name": "妹", "full_name": "博士の妹", "playable": false,
 		"color": Color(0.95, 0.95, 1.0), "accent": Color(0.7, 0.8, 1.0), "hair": Color(0.75, 0.75, 0.85), "profile": ""},
 	"kaguya": {"name": "カグヤ", "full_name": "アヅマ国の姫・カグヤ", "playable": false,

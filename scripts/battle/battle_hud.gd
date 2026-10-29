@@ -94,6 +94,8 @@ func _draw() -> void:
 	_draw_link()
 	_draw_ovl_gauges()
 	_draw_finish_prompt()
+	_draw_turn()
+	_draw_counter_prompt()
 	_draw_buffs()
 	if battle.started and not battle.ended:
 		var hint = "J:攻撃  K(+↑↓→):術技  Space:ジャンプ  L:ガード  Tab:ターゲット  U:共鳴秘技  I:オーバーリミッツ  Esc:メニュー"
@@ -306,22 +308,91 @@ func show_combo_end(hits: int, dmg: int) -> void:
 	tw.tween_callback(l.queue_free)
 
 
-func make_bubble(sp: String, text: String) -> Control:
-	var p = UI.panel(Color(1, 1, 1, 0.95), DB.ccolor(sp) if DB.Characters.DATA.has(sp) else UI.C_GOLD)
+# 戦闘中のショートチャット・仲間の声。顔アイコンつきで大きめに出す。urgent は敵の攻撃予告など
+func make_bubble(sp: String, text: String, urgent: bool = false) -> Control:
+	var known: bool = DB.Characters.DATA.has(sp)
+	var col: Color = DB.ccolor(sp) if known else UI.C_GOLD
+	var p = PanelContainer.new()
+	var bgc = Color(1.0, 0.95, 0.86, 0.97) if urgent else Color(1, 1, 1, 0.96)
+	p.add_theme_stylebox_override("panel", UI.box(bgc, Color(1.0, 0.45, 0.2) if urgent else col, 4 if urgent else 3, 12))
+	var hb = HBoxContainer.new()
+	hb.add_theme_constant_override("separation", 8)
+	p.add_child(hb)
+	if known:
+		var clip = Control.new()
+		clip.clip_contents = true
+		clip.custom_minimum_size = Vector2(56, 56)
+		var face = Portrait.new()
+		face.setup(sp, "surprise" if urgent else "")
+		face.size = Vector2(120, 142)
+		face.position = Vector2(28, 30) - face.face_point()
+		face.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		clip.add_child(face)
+		hb.add_child(clip)
 	var v = VBoxContainer.new()
 	v.add_theme_constant_override("separation", 0)
-	p.add_child(v)
-	var name = UI.label(DB.cname(sp), 13, DB.ccolor(sp).darkened(0.25), true)
-	v.add_child(name)
-	var l = UI.label(text, 17, Color(0.1, 0.1, 0.15))
+	hb.add_child(v)
+	v.add_child(UI.label(DB.cname(sp), 15, col.darkened(0.3), true))
+	var l = UI.label(text, 23 if urgent else 21, Color(0.55, 0.1, 0.05) if urgent else Color(0.1, 0.1, 0.15), urgent)
 	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	l.custom_minimum_size = Vector2(min(360, 30 + text.length() * 17), 0)
+	l.custom_minimum_size = Vector2(min(420, 30 + text.length() * (23 if urgent else 21)), 0)
 	v.add_child(l)
-	p.z_index = 30
+	p.z_index = 31 if urgent else 30
 	add_child(p)
 	p.modulate.a = 0.0
-	p.create_tween().tween_property(p, "modulate:a", 1.0, 0.12)
+	p.pivot_offset = Vector2(60, 40)
+	p.scale = Vector2(0.7, 0.7)
+	var tw = p.create_tween().set_parallel()
+	tw.tween_property(p, "modulate:a", 1.0, 0.1)
+	tw.tween_property(p, "scale", Vector2.ONE, 0.16).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	return p
+
+
+# ターン表示：上中央に、いまどちらのターンか・残り時間
+func _draw_turn() -> void:
+	if not battle.started or battle.ended:
+		return
+	var cx := 640.0
+	# ボス戦はHPバーの下に出す
+	var top := 10.0
+	for e in battle.enemies:
+		if e.data.get("boss", false) and e.alive():
+			top = 80.0
+	var r := Rect2(cx - 190, top, 380, 50)
+	if battle.turn == "party":
+		var ratio: float = clampf(battle.turn_t / battle.PARTY_TURN_TIME, 0.0, 1.0)
+		draw_rect(r, Color(0.05, 0.12, 0.25, 0.85))
+		draw_rect(r, Color(0.5, 0.85, 1.0, 0.9), false, 2.0)
+		draw_string(UI.FONT_BOLD, r.position + Vector2(12, 26), "TURN %d　こちらのターン" % battle.turn_no, HORIZONTAL_ALIGNMENT_LEFT, -1, 20, Color(0.75, 0.95, 1.0))
+		var secs := "%.1f" % max(0.0, battle.turn_t)
+		draw_string(UI.FONT_BOLD, r.position + Vector2(r.size.x - 70, 26), secs, HORIZONTAL_ALIGNMENT_RIGHT, 60, 20, Color.WHITE if battle.turn_t > 2.5 else Color(1.0, 0.6, 0.4))
+		draw_rect(Rect2(r.position + Vector2(10, 36), Vector2(r.size.x - 20, 8)), Color(0, 0, 0, 0.5))
+		draw_rect(Rect2(r.position + Vector2(10, 36), Vector2((r.size.x - 20) * ratio, 8)), Color(0.45, 0.85, 1.0))
+	else:
+		var pulse := 0.75 + sin(t * 6.0) * 0.25
+		r = Rect2(cx - 270, top, 540, 50)
+		draw_rect(r, Color(0.3, 0.05, 0.05, 0.85))
+		draw_rect(r, Color(1.0, 0.45, 0.35, pulse), false, 3.0)
+		draw_string(UI.FONT_BOLD, r.position + Vector2(12, 26), "TURN %d　敵のターン" % battle.turn_no, HORIZONTAL_ALIGNMENT_LEFT, -1, 20, Color(1.0, 0.8, 0.75))
+		var hint := "%s ガード（直前でパリィ）　%s+方向 ステップ　%s ジャンプ" % [Game.btn("guard"), Game.btn("guard"), Game.btn("jump")]
+		draw_string(UI.FONT, r.position + Vector2(12, 44), hint, HORIZONTAL_ALIGNMENT_LEFT, r.size.x - 20, 14, Color(1, 0.9, 0.85, 0.85))
+		# 攻撃中の敵に印
+		var a: Fighter = battle.turn_actor
+		if a and is_instance_valid(a) and a.alive():
+			var p: Vector2 = a.head() + battle.world.position + Vector2(0, -36)
+			UI.poly(self, PackedVector2Array([p + Vector2(-12, -18), p + Vector2(12, -18), p + Vector2(0, 0)]), Color(1.0, 0.4, 0.3, pulse))
+
+
+# パリィ直後のカウンター受付
+func _draw_counter_prompt() -> void:
+	if battle.counter_t <= 0.0 or battle.player == null:
+		return
+	var p: Vector2 = battle.player.head() + battle.world.position + Vector2(0, -80)
+	var a := clampf(battle.counter_t / battle.COUNTER_WINDOW, 0.0, 1.0)
+	var txt := "カウンター！ " + Game.btn("attack")
+	draw_rect(Rect2(p + Vector2(-110, -30), Vector2(220, 42)), Color(0.1, 0.05, 0.0, 0.8))
+	draw_rect(Rect2(p + Vector2(-110, 10), Vector2(220 * a, 4)), Color(1.0, 0.85, 0.3))
+	draw_string(UI.FONT_BOLD, p + Vector2(-110, 0), txt, HORIZONTAL_ALIGNMENT_CENTER, 220, 26, Color(1.0, 0.9, 0.4))
 
 
 func play_link_cutin(a: String, b: String, ld: Dictionary) -> void:

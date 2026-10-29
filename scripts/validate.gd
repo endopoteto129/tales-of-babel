@@ -56,6 +56,8 @@ static func _lines(where: String, lines: Array) -> void:
 		if sp.begins_with("@"):
 			if sp == "@title":
 				_title(where, ln[1])
+			if sp == "@cg" and ln.size() > 1 and not str(ln[1]).begins_with("cg_"):
+				errors.append(where + " bad cg " + str(ln[1]))
 			if sp == "@join" and not DB.Characters.DATA.has(ln[1]):
 				errors.append(where + " bad join " + ln[1])
 			continue

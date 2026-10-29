@@ -35,6 +35,9 @@ func _ready() -> void:
 	tp.add_child(talk_label)
 	_make_stock()
 	_refresh()
+	if Game.should_tutorial("shop"):
+		await Main.inst.show_tutorial("shop")
+		_refresh()
 	_say("towner", DB.Skits.shop_greeting())
 	var comment: Array = DB.Skits.shop_comment()
 	if comment.size() > 0:

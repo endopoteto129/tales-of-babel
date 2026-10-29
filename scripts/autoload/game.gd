@@ -75,6 +75,7 @@ func controls_text(battle_only: bool = false) -> String:
 		t = "[b]バトル（キーボード）[/b]\n移動：A/D・←→　通常攻撃：J（Z）\n術技：K（X）＋方向なし/↑/↓/←→で4種\nジャンプ：Space（C）　ガード：L（Shift）　ガード中に←→でステップ\nターゲット切替：Tab（Q）　共鳴秘技：U（V）（絆ゲージ満タン時）\nオーバーリミッツ：I（B）（OVLゲージ満タン時）\n秘奥義：オーバーリミッツ中に I（秘奥義ゲージ100%以上）\n仲間に術技を指示：1/2/3　メニュー：Esc\n（デバッグ：F9 で敵のHPを残り10に）"
 		if not battle_only:
 			t += "\n\n[b]マップ[/b]\n←→でルート選択、Enter で進む。スキット：T　メニュー：M"
+	t += "\n\n[b]ターンの流れ[/b]\nこちらのターン（約7秒）は、仲間と一緒に自由に攻め立てる。時間切れで敵のターンへ。\n敵のターンは、敵が1体ずつ攻撃してくる。仲間の声を合図に、ガード・ステップ・ジャンプでしのごう。\n攻撃が当たる直前にガードを押すと「パリィ」。すかさず攻撃ボタンで「カウンター」、仲間も追撃に加わる。\nレンが無傷で敵のターンをしのぐと、次のこちらのターンが2秒延びる。"
 	t += "\n\n[b]テイルズ流のコツ[/b]\n通常攻撃 → 特技 → 奥義 の順にキャンセルして繋げよう。\n仲間と同じ敵を叩くと「連携」で絆ゲージが一気にたまる。\n秘奥義ゲージは戦闘をまたいで300%までたまる。200%で2人、300%で3人の合体秘奥義になる。"
 	return t
 
@@ -227,11 +228,26 @@ func present_party() -> Array:
 	return party.filter(func(m) -> bool: return not captured(m["id"]))
 
 
-# 捕らわれている仲間がしゃべる場面は、合流するまで出さない
+# チュートリアル：まだ見ていなければ true を返して既読にする（自動テスト中は出さない）
+func should_tutorial(id: String) -> bool:
+	if flags.get("tut_" + id, false) or not DB.Tutorials.DATA.has(id):
+		return false
+	flags["tut_" + id] = true
+	for a in ["--autotest", "--balance", "--shots", "--gallery"]:
+		if a in OS.get_cmdline_user_args():
+			return false
+	return true
+
+
+func seen_tutorials() -> Array:
+	return DB.Tutorials.ORDER.filter(func(id) -> bool: return flags.get("tut_" + id, false))
+
+
+# まだ加入していない仲間や、捕らわれている仲間がしゃべる場面は出さない
 func lines_available(lines: Array) -> bool:
 	for ln in lines:
 		var sp = str(ln[0])
-		if captured(sp) and DB.Characters.DATA.has(sp) and DB.chara(sp).get("playable", false):
+		if DB.Characters.DATA.has(sp) and DB.chara(sp).get("playable", false) and not is_joined(sp):
 			return false
 	return true
 

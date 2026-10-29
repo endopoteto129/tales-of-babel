@@ -74,6 +74,30 @@ var chat_used: Dictionary = {}
 var cheer_t := 14.0
 var banter_t := 9.0
 var events_fired: Dictionary = {}
+
+# ターン制：こちらのターンは全員で自由に攻め、敵のターンは一体ずつの攻撃を回避・ガード・パリィでしのぐ
+const PARTY_TURN_TIME := 7.0
+const PARTY_TURN_GRACE := 2.0    # 時間切れでも、レンの連携が終わるまでは待つ
+const ENEMY_TURN_LIMIT := 16.0
+const PARRY_WINDOW := 0.25       # 攻撃が当たる直前にガードを押すとパリィ
+const COUNTER_WINDOW := 0.9      # パリィのあと、攻撃ボタンでカウンター
+const PERFECT_BONUS := 2.0       # 無傷でしのぐと次のターンが延びる
+const TELEGRAPH_MULT := 1.5      # 敵のターンの攻撃は予備動作を長めに見せる
+var turn := "party"
+var turn_no := 1
+var turn_t := PARTY_TURN_TIME
+var enemy_turn_t := 0.0
+var enemy_queue: Array = []      # [敵, 残りの攻撃回数]
+var turn_actor: Fighter
+var actor_attacked := false
+var actor_wait := 0.0
+var counter_t := 0.0
+var counter_target: Fighter
+var ren_hurt_this_turn := false
+var enemy_attacks_this_turn := 0
+var callout_bubble: Control
+var callout_t := 0.0
+var callout_speaker := ""
 var rewards: Dictionary = {}
 
 
@@ -120,7 +144,7 @@ func _ready() -> void:
 	var ids: Array = params.get("enemies", ["slime"])
 	var scale: float = DB.floor_data(Game.floor_num)["scale"]
 	if kind == "elite":
-		scale *= 1.15
+		scale *= 1.05
 	scale *= params.get("scale", 1.0)
 	for i in range(ids.size()):
 		var e = Fighter.new()
@@ -132,6 +156,7 @@ func _ready() -> void:
 		enemies.append(e)
 	player_target = enemies[0]
 	first_strike_t = Game.bmod("first_strike")
+	turn_t = PARTY_TURN_TIME + first_strike_t
 	link = Game.bmod("link_start")
 	hud.build()
 	_intro()
@@ -158,6 +183,26 @@ func _intro() -> void:
 		ovl = 100.0
 		Game.flags["mystic_gauge"] = 300.0
 	_check_analysis()
+	_tutorial("battle")
+
+
+# 新しい要素のチュートリアル。表示中は戦闘を止める
+func _tutorial(id: String) -> void:
+	if ended or not Game.should_tutorial(id):
+		return
+	paused = true
+	await Main.inst.show_tutorial(id)
+	if is_inside_tree():
+		paused = false
+
+
+func _check_tutorials() -> void:
+	if link >= 100.0 and not Game.flags.get("tut_link", false):
+		_tutorial("link")
+	elif ovl >= 100.0 and not Game.flags.get("tut_ovl", false):
+		_tutorial("ovl")
+	elif ovl_t > 0.0 and mystic_gauge() >= 100.0 and not Game.flags.get("tut_mystic", false):
+		_tutorial("mystic")
 
 
 # ------------------------------------------------------------ メインループ
@@ -218,7 +263,10 @@ func _process(delta: float) -> void:
 		finish_auto_t += delta
 		if finish_auto_t > 1.5:
 			fire_finisher()
+	_tick_callout(delta)
 	if started and not ended:
+		_check_tutorials()
+		_tick_turn(dt)
 		_tick_cheer(dt)
 		_tick_banter(dt)
 		_check_events()
@@ -255,11 +303,12 @@ func _poll_commands() -> void:
 	if Input.is_action_just_pressed("target"):
 		_cycle_target()
 	elif Input.is_action_just_pressed("link"):
-		try_link()
+		if not is_enemy_turn():
+			try_link()
 	elif Input.is_action_just_pressed("overlimit"):
 		if finish_target and is_instance_valid(finish_target):
 			fire_finisher()
-		else:
+		elif not is_enemy_turn():
 			_press_overlimit()
 	else:
 		for i in range(3):
@@ -414,13 +463,12 @@ func apply_hit(att: Fighter, tgt: Fighter, spec: Dictionary, power: float, range
 	if tgt.team == 1 and tgt.guard_rate > 0.0 and tgt.state in ["idle", "move"] and tgt.facing == -dir and randf() < tgt.guard_rate * 0.5:
 		guarding = true
 	if guarding and not spec.get("link", false):
-		var just = tgt.skills.has("perfect_guard") and time - tgt.guard_pressed_at < 0.22
+		# 当たる直前に構えたらパリィ（スキル「ジャストガード」で受付が広がる）
+		var parry_w: float = PARRY_WINDOW * (1.6 if tgt.skills.has("perfect_guard") else 1.0)
+		var just: bool = tgt.team == 0 and att.team == 1 and time - tgt.guard_pressed_at < parry_w
 		if just:
 			idmg = 0
-			tgt.tp = min(tgt.max_tp, tgt.tp + 6)
-			popup_text(tgt.head(), "JUST GUARD!", Color(0.6, 1.0, 1.0), 24)
-			Sfx.play("guard", 1.4)
-			hitstop = 0.08
+			on_parry(tgt, att)
 		else:
 			var gm = 0.2 * Game.bmod("guard_mult") if tgt.team == 0 else 0.3
 			if spec.get("guardable", false) and tgt.team == 0:
@@ -449,6 +497,8 @@ func apply_hit(att: Fighter, tgt: Fighter, spec: Dictionary, power: float, range
 	if tgt.team == 1 and tgt.data.get("boss", false):
 		launch *= 0.4
 		knock *= 0.5
+	if tgt == player and att.team == 1:
+		ren_hurt_this_turn = true
 	tgt.take_hit(idmg, knock, launch, dir, spec.get("stun", 1.0), heavy)
 	_dmg_number(tgt, idmg, crit, label_extra, tgt.team == 0)
 	var sc = Color(1, 0.95, 0.7) if att.team == 0 else Color(1, 0.5, 0.4)
@@ -620,6 +670,7 @@ func on_arte_used(f: Fighter, name: String, level: int) -> void:
 
 
 func on_break(f: Fighter) -> void:
+	_tutorial("break")
 	spawn_fx("break", f.center(), Color(1.0, 0.85, 0.4), 1.0)
 	popup_text(f.head() + Vector2(0, -40), "BREAK!", Color(1.0, 0.85, 0.3), 34, true)
 	Sfx.play("explode", 1.4)
@@ -637,8 +688,9 @@ func on_boss_phase(f: Fighter) -> void:
 
 
 func boss_warning(f: Fighter, text: String) -> void:
-	hud.show_warning(text)
+	# 予告は画面の文字ではなく、仲間の声で伝える
 	Sfx.play("warn")
+	callout("jump" if ("跳" in text or "飛" in text) else "guard", f)
 
 
 func on_death(f: Fighter) -> void:
@@ -867,6 +919,7 @@ func on_boss_held(f: Fighter) -> void:
 	shake(0.8)
 	Sfx.play("explode", 0.9)
 	popup_text(f.head() + Vector2(0, -50), "FINISH CHANCE!", Color(1.0, 0.85, 0.3), 30, true)
+	_tutorial("finisher")
 
 
 func fire_finisher() -> void:
@@ -1196,3 +1249,248 @@ func use_item(item_id: String, tgt: Fighter) -> bool:
 	if chat_t <= 0.0 and chat_queue.is_empty():
 		chat("item", {"who": tgt.cid})
 	return true
+
+
+# ------------------------------------------------------------ ターン制
+func _tick_turn(dt: float) -> void:
+	if frozen:
+		return
+	counter_t = max(0.0, counter_t - dt)
+	if finish_target:
+		# とどめ待ちのあいだはこちらのターンのまま止める
+		if turn != "party":
+			_start_party_turn()
+		return
+	if turn == "party":
+		turn_t -= dt
+		if turn_t <= 0.0:
+			var busy: bool = player and player.alive() and player.state in ["act", "cast", "link"]
+			if busy and turn_t > -PARTY_TURN_GRACE:
+				return
+			_start_enemy_turn()
+		return
+	enemy_turn_t += dt
+	if enemy_turn_t > ENEMY_TURN_LIMIT:
+		_start_party_turn()
+		return
+	if turn_actor == null or not is_instance_valid(turn_actor) or not turn_actor.alive() or turn_actor.break_t > 0.0:
+		_next_actor()
+		return
+	if turn_actor.state == "act":
+		actor_attacked = true
+		actor_wait = 0.0
+	elif actor_attacked and turn_actor.state != "hit":
+		actor_wait += dt
+		if actor_wait > 0.45:
+			enemy_queue[0][1] -= 1
+			actor_attacked = false
+			actor_wait = 0.0
+			if enemy_queue[0][1] <= 0:
+				_next_actor()
+			else:
+				turn_actor.ai_t = 0.2
+	elif actor_attacked and turn_actor.state == "hit":
+		# カウンターで崩された敵は、そこで攻撃をやめる
+		actor_wait += dt
+		if actor_wait > 1.2:
+			_next_actor()
+
+
+func _start_enemy_turn() -> void:
+	turn = "enemy"
+	enemy_turn_t = 0.0
+	enemy_queue.clear()
+	ren_hurt_this_turn = false
+	enemy_attacks_this_turn = 0
+	var alive: Array = enemies.filter(func(e) -> bool: return e.alive() and not e.held)
+	alive.sort_custom(func(a, b) -> bool: return a.x < b.x)
+	for e in alive:
+		var n := 1
+		if e.data.get("boss", false):
+			n = 2 + (1 if e.phase_level() >= 2 else 0)
+		elif kind == "elite" and alive.size() == 1:
+			n = 2
+		enemy_queue.append([e, n])
+	hud.show_banner("ENEMY TURN", Color(1.0, 0.45, 0.4))
+	_tutorial("enemy_turn")
+	Sfx.play("warn", 1.3, -8)
+	turn_actor = null
+	_next_actor(true)
+
+
+func _next_actor(first: bool = false) -> void:
+	if not first and not enemy_queue.is_empty():
+		enemy_queue.pop_front()
+	while not enemy_queue.is_empty():
+		var e: Fighter = enemy_queue[0][0]
+		if is_instance_valid(e) and e.alive() and e.break_t <= 0.0 and not e.held:
+			break
+		enemy_queue.pop_front()
+	if enemy_queue.is_empty():
+		_start_party_turn()
+		return
+	turn_actor = enemy_queue[0][0]
+	turn_actor.target = enemy_pick_target(turn_actor)
+	turn_actor.ai_t = 0.5 if first else 0.25
+	actor_attacked = false
+	actor_wait = 0.0
+
+
+func _start_party_turn() -> void:
+	var was_enemy := turn == "enemy"
+	turn = "party"
+	turn_actor = null
+	enemy_queue.clear()
+	if not was_enemy:
+		return
+	turn_no += 1
+	turn_t = PARTY_TURN_TIME
+	if enemy_attacks_this_turn > 0 and not ren_hurt_this_turn and player and player.alive():
+		turn_t += PERFECT_BONUS
+		popup_text(player.head() + Vector2(0, -50), "PERFECT DEFENSE!  ターン+%d秒" % int(PERFECT_BONUS), Color(0.6, 1.0, 1.0), 24, true)
+		callout("perfect", null)
+	hud.show_banner("YOUR TURN", Color(0.6, 0.9, 1.0))
+	Sfx.play("confirm", 1.2, -6)
+
+
+func is_enemy_turn() -> bool:
+	return turn == "enemy" and started and not ended
+
+
+# 敵のターンに攻撃してよい敵か
+func may_attack(e: Fighter) -> bool:
+	return is_enemy_turn() and e == turn_actor and not actor_attacked
+
+
+# 敵のターンにステップの無敵で攻撃をかわした
+func on_dodge(f: Fighter) -> void:
+	if time - f.dodged_at < 0.6:
+		return
+	f.dodged_at = time
+	popup_text(f.head(), "回避！", Color(0.7, 1.0, 0.8), 22, true)
+	f.tp = min(f.max_tp, f.tp + 4)
+	link = min(100.0, link + 2.0 * Game.bmod("link_gain_mult"))
+	if f.is_player:
+		slowmo = 0.5
+		slowmo_t = 0.25
+
+
+# 敵が攻撃を始めた瞬間：仲間が声をかけ、敵の頭上に予兆を出す
+func on_enemy_telegraph(e: Fighter, at: Dictionary) -> void:
+	enemy_attacks_this_turn += 1
+	popup_text(e.head() + Vector2(0, -24), "！", Color(1.0, 0.85, 0.3), 40, true)
+	if at.has("warn"):
+		return  # 大技は boss_warning から声がかかる
+	if randf() < 0.75:
+		callout(DB.Callouts.kind_of(at), e)
+
+
+# パリィ成功。レンならカウンターの受付、仲間なら自動で反撃する
+func on_parry(tgt: Fighter, att: Fighter) -> void:
+	popup_text(tgt.head(), "PARRY!", Color(0.6, 1.0, 1.0), 30, true)
+	Sfx.play("guard", 1.6)
+	spawn_fx("guard", tgt.center(), Color(0.7, 1.0, 1.0), 1.6)
+	hitstop = 0.12
+	link = min(100.0, link + 4.0 * Game.bmod("link_gain_mult"))
+	tgt.tp = min(tgt.max_tp, tgt.tp + 6)
+	if tgt.is_player:
+		counter_t = COUNTER_WINDOW
+		counter_target = att
+		slowmo = 0.35
+		slowmo_t = 0.45
+		callout("parry", null)
+	elif tgt.team == 0 and att.alive():
+		callout_from(tgt.cid, "ally_parry")
+		_ally_counter(tgt, att, 0.25)
+
+
+func try_counter() -> bool:
+	if counter_t <= 0.0 or counter_target == null or not is_instance_valid(counter_target) or not counter_target.alive():
+		return false
+	counter_t = 0.0
+	var e: Fighter = counter_target
+	# 敵の目の前へ踏み込み、渾身の一撃
+	var side: int = -1 if player.x < e.x else 1
+	player.x = clamp(e.x + side * (e.body.x / 2.0 + 46.0), LEFT + 30, RIGHT - 30)
+	player.facing = -side
+	player.invul = max(player.invul, 0.6)
+	var spec: Dictionary = player.combo[player.combo.size() - 1].duplicate()
+	spec["power"] = spec.get("power", 1.0) * 3.0
+	spec["stun"] = 2.0
+	spec["knock"] = 260
+	player._begin_act(spec, 1, "カウンター")
+	popup_text(e.head() + Vector2(0, -40), "COUNTER!", Color(1.0, 0.85, 0.3), 34, true)
+	flash(Color(1, 0.95, 0.7, 0.35))
+	shake(0.4)
+	add_ovl(8.0)
+	# 近くの仲間が追撃に加わる（連携カウンター）
+	var helpers: Array = party.filter(func(p) -> bool: return p != player and p.alive())
+	if not helpers.is_empty():
+		var h: Fighter = helpers[randi() % helpers.size()]
+		callout_from(h.cid, "counter")
+		_ally_counter(h, e, 0.35)
+	return true
+
+
+func _ally_counter(h: Fighter, e: Fighter, delay: float) -> void:
+	await get_tree().create_timer(delay).timeout
+	if not is_instance_valid(h) or not is_instance_valid(e) or not h.alive() or not e.alive() or ended:
+		return
+	var ranged := h.role in ["caster", "gunner"]
+	if not ranged:
+		var side: int = -1 if h.x < e.x else 1
+		h.x = clamp(e.x + side * (e.body.x / 2.0 + 50.0), LEFT + 30, RIGHT - 30)
+		h.facing = -side
+	else:
+		h.facing = 1 if e.x > h.x else -1
+	spawn_fx("crit" if not ranged else "spark", e.center(), h.data["color"], 1.4)
+	apply_hit(h, e, {"power": 1.0, "knock": 180, "stun": 1.4, "counter": true}, 1.6, ranged, h.facing)
+	popup_text(e.head() + Vector2(0, -70), "%sの追撃！" % h.display_name, h.data["color"].lightened(0.4), 20)
+
+
+# ------------------------------------------------------------ 仲間の声（予告・反応）
+func callout(kind_key: String, attacker: Fighter) -> void:
+	var lines: Dictionary = DB.Callouts.LINES.get(kind_key, {})
+	var cands: Array = []
+	for p in party:
+		if p != player and p.alive() and lines.has(p.cid) and (attacker == null or attacker.target != p):
+			cands.append(p.cid)
+	if cands.is_empty():
+		for p in party:
+			if p != player and p.alive() and lines.has(p.cid):
+				cands.append(p.cid)
+	if cands.is_empty():
+		if companions.pots_visible and lines.has("pots"):
+			cands.append("pots")
+		elif companions.nine_visible and lines.has("nine"):
+			cands.append("nine")
+	if cands.is_empty():
+		return
+	callout_from(cands[randi() % cands.size()], kind_key)
+
+
+func callout_from(sp: String, kind_key: String) -> void:
+	var lines: Dictionary = DB.Callouts.LINES.get(kind_key, {})
+	if not lines.has(sp) or not _speaker_present(sp):
+		return
+	var opts: Array = lines[sp]
+	var text: String = opts[randi() % opts.size()]
+	if is_instance_valid(callout_bubble):
+		callout_bubble.queue_free()
+	callout_speaker = sp
+	callout_bubble = hud.make_bubble(sp, text, true)
+	callout_t = 1.6
+	Sfx.play("chat", 1.15, -3)
+
+
+func _tick_callout(delta: float) -> void:
+	if callout_t <= 0.0:
+		return
+	callout_t -= delta
+	if is_instance_valid(callout_bubble):
+		var anchor = speaker_pos(callout_speaker)
+		callout_bubble.position = anchor - Vector2(callout_bubble.size.x / 2.0, callout_bubble.size.y + 8) + world.position
+		callout_bubble.position.x = clamp(callout_bubble.position.x, 8, 1272 - callout_bubble.size.x)
+		callout_bubble.position.y = max(callout_bubble.position.y, 110)
+		if callout_t <= 0.0:
+			callout_bubble.queue_free()

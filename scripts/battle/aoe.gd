@@ -83,6 +83,8 @@ func _pulse() -> void:
 		Sfx.play("hit", 1.3, -10)
 	var r = Rect2(cx - w / 2.0, battle.GROUND_Y - hgt, w, hgt)
 	for f in battle.opponents_of_team(team):
+		if f.alive() and f.invul > 0.0 and f.team == 0 and team == 1 and battle.is_enemy_turn() and r.intersects(f.body_rect()):
+			battle.on_dodge(f)
 		if not f.alive() or f.invul > 0.0:
 			continue
 		if shape == "quake" and f.h > 12.0:

@@ -88,6 +88,7 @@ var shortcut_req := ""
 var hurt_this_battle := false
 var stun_mult := 1.0
 var enemy_speed_mult := 1.0
+var dodged_at := -10.0
 
 
 func setup_party(b: Node, member: Dictionary, player: bool) -> void:
@@ -136,6 +137,9 @@ func setup_enemy(b: Node, eid: String, scale: float) -> void:
 	if data.get("boss", false):
 		hp_scale *= DB.floor_data(Game.floor_num).get("boss_hp", 1.0)
 		pow_scale *= DB.Floors.BOSS_POWER_MULT
+	var tm: Array = DB.Floors.TURN_BOSS_HP_MULT if data.get("boss", false) else DB.Floors.TURN_HP_MULT
+	hp_scale *= lerpf(tm[0], tm[1], clampf((b.party.size() - 1) / 3.0, 0.0, 1.0))
+	pow_scale *= DB.Floors.TURN_POWER_MULT
 	if Game.flags.get("allies_captured", false):
 		# 頂上の一本道はレンひとり。ナインの「ヒーローは負けない」という認識が敵を弱らせている
 		hp_scale *= DB.Floors.SOLO_HP_MULT
@@ -295,7 +299,9 @@ func _physics(dt: float) -> void:
 	if fly_h > 0.0 and not dead:
 		# 飛行する敵は目標高度へ戻る
 		if not (state == "act" and act.get("dive", false)):
-			h = lerp(h, fly_h, min(1.0, dt * 3.0))
+			# こちらのターンは低く降りてきて、攻撃が届く高さに身構える
+			var want_h: float = fly_h if team == 0 or battle.is_enemy_turn() else min(fly_h, 30.0)
+			h = lerp(h, want_h, min(1.0, dt * 3.0))
 			vy = 0.0
 	else:
 		if h > 0.0 or vy > 0.0:
@@ -352,6 +358,11 @@ func _player_control(dt: float) -> void:
 		h = 1.0
 		set_state("jump")
 		Sfx.play("jump")
+	if battle.is_enemy_turn() and (Input.is_action_just_pressed("attack") or Input.is_action_just_pressed("arte")):
+		# 敵のターン：攻撃はパリィ直後のカウンターだけ
+		if Input.is_action_just_pressed("attack"):
+			battle.try_counter()
+		return
 	if Input.is_action_just_pressed("attack"):
 		_auto_face()
 		start_normal()
@@ -617,6 +628,8 @@ func _melee_hits() -> void:
 	var hits: int = act.get("hits", 1)
 	var interval: float = act.get("hit_interval", 0.1)
 	for f in battle.opponents(self):
+		if f.alive() and f.invul > 0.0 and f.team == 0 and team == 1 and battle.is_enemy_turn() and r.intersects(f.body_rect()):
+			battle.on_dodge(f)
 		if not f.alive() or f.invul > 0.0:
 			continue
 		if not r.intersects(f.body_rect()):
@@ -767,6 +780,9 @@ func add_buff(stat: String, mult: float, time: float) -> void:
 # ------------------------------------------------------------ 味方AI
 func _ally_ai(dt: float) -> void:
 	ai_t -= dt
+	if battle.is_enemy_turn():
+		_ally_defend(dt)
+		return
 	if shortcut_req != "":
 		var aid = shortcut_req
 		shortcut_req = ""
@@ -781,19 +797,8 @@ func _ally_ai(dt: float) -> void:
 	target = enemy
 	var d = enemy.x - x
 	var dist: float = abs(d)
-	# 回復の優先
-	if role in ["caster", "gunner"] and ai_t <= 0.0:
-		var heal_th = 0.55 if role == "gunner" else 0.38
-		for aid in arte_slots:
-			if aid == "":
-				continue
-			var a: Dictionary = DB.arte(aid)
-			if a["kind"] == "heal" and tp >= arte_cost(aid):
-				var w = battle.weakest_ally(self, a.get("revive", false))
-				if w and (a.get("revive", false) or w.hp_ratio() < heal_th or (a.get("all", false) and battle.party_avg_hp() < 0.6)):
-					if use_arte(aid):
-						ai_t = 0.6
-						return
+	if _try_heal():
+		return
 	# 敵の大技にはガードで備える
 	if enemy.state == "act" and enemy.act.get("guardable", false) and on_ground():
 		if state != "guard":
@@ -847,6 +852,59 @@ func _ally_ai(dt: float) -> void:
 						start_normal()
 
 
+# 回復の優先（回復役のみ）
+func _try_heal() -> bool:
+	if role in ["caster", "gunner"] and ai_t <= 0.0:
+		var heal_th = 0.55 if role == "gunner" else 0.38
+		for aid in arte_slots:
+			if aid == "":
+				continue
+			var a: Dictionary = DB.arte(aid)
+			if a["kind"] == "heal" and tp >= arte_cost(aid):
+				var w = battle.weakest_ally(self, a.get("revive", false))
+				if w and (a.get("revive", false) or w.hp_ratio() < heal_th or (a.get("all", false) and battle.party_avg_hp() < 0.6)):
+					if use_arte(aid):
+						ai_t = 0.6
+						return true
+	return false
+
+
+# 敵のターン：攻撃せず、来る攻撃を見てガード（うまくいけばパリィ）。回復役は回復を続ける
+var defend_lead := 0.3
+
+
+func _ally_defend(dt: float) -> void:
+	if _try_heal():
+		return
+	var foe: Fighter = battle.turn_actor
+	if foe == null or not is_instance_valid(foe) or not foe.alive():
+		if state == "guard" and state_t > 0.3:
+			set_state("idle")
+		vx = 0.0
+		if state == "move":
+			set_state("idle")
+		return
+	facing = 1 if foe.x > x else -1
+	var aimed: bool = foe.target == self or foe.act.has("aoe") or abs(foe.x - x) < 220.0
+	if foe.state == "act" and aimed and on_ground():
+		var su: float = foe.act.get("startup", 0.3)
+		if state != "guard" and foe.act_t >= su - defend_lead:
+			set_state("guard")
+			guard_pressed_at = battle.time
+			vx = 0.0
+		return
+	defend_lead = randf_range(0.05, 0.7) * (0.6 if skills.has("perfect_guard") else 1.0)
+	if state == "guard" and state_t > 0.3:
+		set_state("idle")
+	# 後衛は間合いを取る
+	if role in ["caster", "gunner"] and abs(foe.x - x) < 200.0 and x > battle.LEFT + 80 and x < battle.RIGHT - 80:
+		_walk(-sign(foe.x - x))
+	else:
+		vx = 0.0
+		if state == "move":
+			set_state("idle")
+
+
 func _ai_follow_up() -> bool:
 	# 味方AIのコンボ継続：通常攻撃 → 特技 → 奥義
 	if act_t < act.get("startup", 0.1) + act.get("active", 0.1):
@@ -891,12 +949,18 @@ func _enemy_ai(dt: float) -> void:
 	if role == "boss" and not warned and phase == 0 and hp_ratio() < 0.5:
 		phase = 1
 		battle.on_boss_phase(self)
+	if battle.turn_actor != self or not battle.is_enemy_turn():
+		# 自分の番ではない：身構えて待つ
+		vx = 0.0
+		if state == "move":
+			set_state("idle")
+		return
 	var attacks: Array = data["attacks"]
-	if ai_t <= 0.0:
+	if ai_t <= 0.0 and battle.may_attack(self):
 		var usable: Array = []
 		for i in range(attacks.size()):
 			var at: Dictionary = attacks[i]
-			if cooldowns.get(i, 0.0) > 0.0:
+			if cooldowns.get(i, 0.0) > 0.0 and attacks.size() > 1:
 				continue
 			if at.get("phase", 0) > phase_level():
 				continue
@@ -949,7 +1013,8 @@ func _enemy_attack(i: int) -> void:
 	var at: Dictionary = data["attacks"][i].duplicate(true)
 	cooldowns[i] = at.get("cooldown", 2.0)
 	ai_t = at.get("recovery", 0.6) + randf_range(0.2, 0.8) * (0.6 if role == "boss" else 1.0)
-	at["startup"] = at["windup"] / enemy_speed_mult
+	at["startup"] = at["windup"] / enemy_speed_mult * battle.TELEGRAPH_MULT
+	battle.on_enemy_telegraph(self, at)
 	at["hit_interval"] = at.get("active", 0.2) / max(1, at.get("hits", 1))
 	if at.get("magic", false):
 		at["magic_attack"] = true

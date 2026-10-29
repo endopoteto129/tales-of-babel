@@ -1,7 +1,7 @@
 # キャンプメニュー（ステータス・術技・スキルツリー・称号・アイテム・隊列・システム）
 extends Control
 
-const TABS := ["ステータス", "術技", "スキルツリー", "称号", "アイテム", "隊列", "システム"]
+const TABS := ["ステータス", "術技", "スキルツリー", "称号", "アイテム", "隊列", "チュートリアル", "システム"]
 
 var params: Dictionary
 var tab := 0
@@ -95,6 +95,8 @@ func _rebuild() -> void:
 		5:
 			_formation()
 		6:
+			_tutorials()
+		7:
 			_system()
 
 
@@ -354,6 +356,44 @@ func _formation() -> void:
 				Game.party[idx - 1] = Game.party[idx]
 				Game.party[idx] = tmp
 				_rebuild(), 18))
+
+
+var tut_sel := ""
+
+
+# 一度見たチュートリアルを読み返す
+func _tutorials() -> void:
+	var hb = HBoxContainer.new()
+	hb.add_theme_constant_override("separation", 16)
+	content.add_child(hb)
+	var list = VBoxContainer.new()
+	list.custom_minimum_size = Vector2(300, 0)
+	list.add_theme_constant_override("separation", 6)
+	hb.add_child(list)
+	var seen: Array = Game.seen_tutorials()
+	if seen.is_empty():
+		list.add_child(UI.label("まだ見たチュートリアルはありません", 18, UI.C_DIM))
+		return
+	if tut_sel == "" or not tut_sel in seen:
+		tut_sel = seen[0]
+	for id in seen:
+		var tid: String = id
+		var b = UI.button(DB.Tutorials.DATA[tid]["title"], func() -> void:
+			tut_sel = tid
+			_rebuild(), 18)
+		if tid == tut_sel:
+			b.add_theme_color_override("font_color", UI.C_GOLD)
+		list.add_child(b)
+	var p = UI.panel()
+	p.custom_minimum_size = Vector2(680, 0)
+	hb.add_child(p)
+	var v = VBoxContainer.new()
+	v.add_theme_constant_override("separation", 10)
+	p.add_child(v)
+	v.add_child(UI.label(DB.Tutorials.DATA[tut_sel]["title"], 24, UI.C_GOLD, true))
+	var body = UI.rich(DB.Tutorials.text_of(tut_sel), 18)
+	body.custom_minimum_size = Vector2(650, 0)
+	v.add_child(body)
 
 
 func _system() -> void:

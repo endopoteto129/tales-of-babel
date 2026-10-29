@@ -6,6 +6,11 @@ extends RefCounted
 const ENEMY_HP_MULT := 1.6
 const ENEMY_POWER_MULT := 1.45
 const BOSS_POWER_MULT := 0.65
+# ターン制にしたぶんの補正（こちらは攻撃時間が区切られ、敵は自分のターンにしか攻撃しない）
+# HPは味方の人数が多いほど高く（ひとりのとき → 四人のとき）
+const TURN_HP_MULT := [1.6, 3.4]
+const TURN_BOSS_HP_MULT := [1.0, 1.2]
+const TURN_POWER_MULT := 2.0
 # 頂上でレンがひとりで戦うとき（仲間が捕らわれている間）の敵の倍率
 const SOLO_HP_MULT := 0.4
 const SOLO_POWER_MULT := 0.35
@@ -37,14 +42,14 @@ const DATA := [
 		"deco": "colosseum", "bg_top": Color(0.55, 0.35, 0.2), "bg_bottom": Color(0.8, 0.62, 0.4), "ground": Color(0.6, 0.45, 0.3), "accent": Color(1.0, 0.8, 0.4),
 		"groups": [["lion", "soldier"], ["soldier", "soldier"], ["lion", "lion"], ["gunner", "soldier"]],
 		"elites": [["soldier", "soldier", "gunner"], ["golem", "lion"]],
-		"boss": ["boss_nene"], "boss_hp": 1.15, "scale": 2.3,
+		"boss": ["boss_nene"], "boss_hp": 0.9, "scale": 2.3,
 	},
 	{
 		"name": "第五層 星詠みの書庫", "sub": "誰かの『認識』が眠る場所",
 		"deco": "library", "bg_top": Color(0.06, 0.05, 0.16), "bg_bottom": Color(0.22, 0.15, 0.36), "ground": Color(0.25, 0.18, 0.3), "accent": Color(0.75, 0.6, 1.0),
 		"groups": [["book", "book"], ["mage_soldier", "soldier"], ["book", "wisp", "wisp"], ["gunner", "book"]],
 		"elites": [["mage_soldier", "mage_soldier", "soldier"], ["golem", "book", "book"]],
-		"boss": ["boss_val"], "boss_hp": 1.1, "scale": 2.9,
+		"boss": ["boss_val"], "boss_hp": 0.8, "scale": 2.9,
 	},
 	{
 		"name": "第六層 機巧の大工房", "sub": "百年前の天才が遺したもの",

@@ -9,6 +9,7 @@ var lines: Array = []
 var idx := -1
 var mode := "story"
 var bg := "black"
+var cg_tex: Texture2D = null   # スチル（assets/stills/<名前>.png があるときだけ表示）
 var title_text := ""
 
 var portraits: Dictionary = {}   # cid -> Portrait
@@ -131,6 +132,8 @@ func _process(delta: float) -> void:
 		if shown_chars >= total:
 			typing = false
 			text_label.visible_characters = -1
+	for k in portraits:
+		portraits[k].visible = cg_tex == null
 	queue_redraw()
 
 
@@ -172,6 +175,11 @@ func _draw() -> void:
 			draw_rect(r, Color(0, 0, 0, 0.35))
 		"none":
 			draw_rect(r, Color(0, 0, 0, 0.55))
+	if cg_tex:
+		# 画面を覆うように拡大して中央に置く
+		var sc: float = max(r.size.x / cg_tex.get_width(), r.size.y / cg_tex.get_height())
+		var sz: Vector2 = cg_tex.get_size() * sc
+		draw_texture_rect(cg_tex, Rect2(r.position + (r.size - sz) / 2.0, sz), false)
 	if flash > 0.0:
 		draw_rect(r, Color(flash_color.r, flash_color.g, flash_color.b, flash))
 
@@ -244,6 +252,11 @@ func _command(line: Array, skipping: bool) -> bool:
 				Game.notified.emit("レシピ『%s』を覚えた！" % DB.Items.RECIPES[line[1]]["name"], "info")
 		"@bg":
 			bg = line[1]
+			cg_tex = null
+		"@cg":
+			# スチル画像がまだ無いときは何もしない（仮の背景と立ち絵のまま進む）
+			var path := "res://assets/stills/%s.png" % (line[1] if line.size() > 1 else "")
+			cg_tex = load(path) if line.size() > 1 and ResourceLoader.exists(path) else null
 		"@shake":
 			if not skipping:
 				shake = 1.0
@@ -258,6 +271,7 @@ func _command(line: Array, skipping: bool) -> bool:
 		"@leave":
 			_remove_portrait(line[1])
 		"@clear":
+			cg_tex = null
 			for k in portraits.keys():
 				_remove_portrait(k)
 		"@caption":
