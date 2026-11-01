@@ -7,6 +7,7 @@ var arte_label: Label
 var arte_t := 0.0
 var warn_label: Label
 var warn_t := 0.0
+var warn_layer: Control   # ボスの大技の予告アイコン。吹き出しより手前に描く
 var combo_label: Label
 var combo_sub: Label
 var results: Control
@@ -42,6 +43,12 @@ func build() -> void:
 	arte_label.size = Vector2(1280, 50)
 	arte_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	add_child(arte_label)
+	warn_layer = Control.new()
+	warn_layer.size = Vector2(1280, 720)
+	warn_layer.z_index = 10
+	warn_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	warn_layer.draw.connect(func() -> void: _draw_warning(warn_layer))
+	add_child(warn_layer)
 	warn_label = UI.outlined(UI.label("", 30, Color(1, 0.4, 0.35), true), 8)
 	warn_label.position = Vector2(0, 150)
 	warn_label.size = Vector2(1280, 50)
@@ -61,6 +68,8 @@ func build() -> void:
 
 func _process(delta: float) -> void:
 	t += delta
+	if warn_layer:
+		warn_layer.queue_redraw()
 	if arte_t > 0.0:
 		arte_t -= delta
 		if arte_t <= 0.0:
@@ -94,8 +103,6 @@ func _draw() -> void:
 	_draw_link()
 	_draw_ovl_gauges()
 	_draw_finish_prompt()
-	_draw_turn()
-	_draw_counter_prompt()
 	_draw_buffs()
 	if battle.started and not battle.ended:
 		var hint = "J:攻撃  K(+↑↓→):術技  Space:ジャンプ  L:ガード  Tab:ターゲット  U:共鳴秘技  I:オーバーリミッツ  Esc:メニュー"
@@ -349,50 +356,39 @@ func make_bubble(sp: String, text: String, urgent: bool = false) -> Control:
 
 
 # ターン表示：上中央に、いまどちらのターンか・残り時間
-func _draw_turn() -> void:
-	if not battle.started or battle.ended:
+# ボスの大技の予告：対処方法のアイコンと、当たる瞬間に向けて縮んでいく輪
+func _draw_warning(ci: CanvasItem) -> void:
+	var w: Array = battle.warning_state()
+	if w.is_empty() or battle.player == null:
 		return
-	var cx := 640.0
-	# ボス戦はHPバーの下に出す
-	var top := 10.0
-	for e in battle.enemies:
-		if e.data.get("boss", false) and e.alive():
-			top = 80.0
-	var r := Rect2(cx - 190, top, 380, 50)
-	if battle.turn == "party":
-		var ratio: float = clampf(battle.turn_t / battle.PARTY_TURN_TIME, 0.0, 1.0)
-		draw_rect(r, Color(0.05, 0.12, 0.25, 0.85))
-		draw_rect(r, Color(0.5, 0.85, 1.0, 0.9), false, 2.0)
-		draw_string(UI.FONT_BOLD, r.position + Vector2(12, 26), "TURN %d　こちらのターン" % battle.turn_no, HORIZONTAL_ALIGNMENT_LEFT, -1, 20, Color(0.75, 0.95, 1.0))
-		var secs := "%.1f" % max(0.0, battle.turn_t)
-		draw_string(UI.FONT_BOLD, r.position + Vector2(r.size.x - 70, 26), secs, HORIZONTAL_ALIGNMENT_RIGHT, 60, 20, Color.WHITE if battle.turn_t > 2.5 else Color(1.0, 0.6, 0.4))
-		draw_rect(Rect2(r.position + Vector2(10, 36), Vector2(r.size.x - 20, 8)), Color(0, 0, 0, 0.5))
-		draw_rect(Rect2(r.position + Vector2(10, 36), Vector2((r.size.x - 20) * ratio, 8)), Color(0.45, 0.85, 1.0))
+	var kind: String = w[0]
+	var left: float = w[1]
+	var ratio: float = clampf(left / w[2], 0.0, 1.0)
+	var col := Color(0.45, 0.9, 1.0) if kind == "jump" else Color(1.0, 0.65, 0.25)
+	# 吹き出しと重ならない画面中央の上寄りに、大きく出す
+	var c := Vector2(640, 215)
+	var now := left < 0.5
+	var pulse := 0.5 + sin(t * 20.0) * 0.5
+	# 画面のふちを薄く染める
+	var edge := Color(col.r, col.g, col.b, 0.18 + (0.2 * pulse if now else 0.0))
+	ci.draw_rect(Rect2(0, 0, 1280, 720), edge, false, 14.0)
+	# 縮んでいく輪（内側の円に重なったときが当たる瞬間）
+	var r_in := 54.0
+	ci.draw_arc(c, r_in + 90.0 * ratio, 0, TAU, 48, Color(col.r, col.g, col.b, 0.35 + 0.6 * (1.0 - ratio)), 4.0)
+	ci.draw_circle(c, r_in, Color(col.r, col.g, col.b, 0.95) if now else Color(0.06, 0.08, 0.14, 0.9))
+	ci.draw_arc(c, r_in, 0, TAU, 40, col.lightened(0.3), 4.0)
+	var ic: Color = Color(0.05, 0.05, 0.1) if now else col.lightened(0.2)
+	if kind == "jump":
+		# 上向きの矢印と地面
+		UI.poly(ci, PackedVector2Array([c + Vector2(0, -30), c + Vector2(22, -6), c + Vector2(8, -6), c + Vector2(8, 16), c + Vector2(-8, 16), c + Vector2(-8, -6), c + Vector2(-22, -6)]), ic)
+		ci.draw_line(c + Vector2(-26, 26), c + Vector2(26, 26), ic, 4.0)
 	else:
-		var pulse := 0.75 + sin(t * 6.0) * 0.25
-		r = Rect2(cx - 270, top, 540, 50)
-		draw_rect(r, Color(0.3, 0.05, 0.05, 0.85))
-		draw_rect(r, Color(1.0, 0.45, 0.35, pulse), false, 3.0)
-		draw_string(UI.FONT_BOLD, r.position + Vector2(12, 26), "TURN %d　敵のターン" % battle.turn_no, HORIZONTAL_ALIGNMENT_LEFT, -1, 20, Color(1.0, 0.8, 0.75))
-		var hint := "%s ガード（直前でパリィ）　%s+方向 ステップ　%s ジャンプ" % [Game.btn("guard"), Game.btn("guard"), Game.btn("jump")]
-		draw_string(UI.FONT, r.position + Vector2(12, 44), hint, HORIZONTAL_ALIGNMENT_LEFT, r.size.x - 20, 14, Color(1, 0.9, 0.85, 0.85))
-		# 攻撃中の敵に印
-		var a: Fighter = battle.turn_actor
-		if a and is_instance_valid(a) and a.alive():
-			var p: Vector2 = a.head() + battle.world.position + Vector2(0, -36)
-			UI.poly(self, PackedVector2Array([p + Vector2(-12, -18), p + Vector2(12, -18), p + Vector2(0, 0)]), Color(1.0, 0.4, 0.3, pulse))
-
-
-# パリィ直後のカウンター受付
-func _draw_counter_prompt() -> void:
-	if battle.counter_t <= 0.0 or battle.player == null:
-		return
-	var p: Vector2 = battle.player.head() + battle.world.position + Vector2(0, -80)
-	var a := clampf(battle.counter_t / battle.COUNTER_WINDOW, 0.0, 1.0)
-	var txt := "カウンター！ " + Game.btn("attack")
-	draw_rect(Rect2(p + Vector2(-110, -30), Vector2(220, 42)), Color(0.1, 0.05, 0.0, 0.8))
-	draw_rect(Rect2(p + Vector2(-110, 10), Vector2(220 * a, 4)), Color(1.0, 0.85, 0.3))
-	draw_string(UI.FONT_BOLD, p + Vector2(-110, 0), txt, HORIZONTAL_ALIGNMENT_CENTER, 220, 26, Color(1.0, 0.9, 0.4))
+		# 盾
+		UI.poly(ci, PackedVector2Array([c + Vector2(-22, -26), c + Vector2(22, -26), c + Vector2(22, 0), c + Vector2(0, 28), c + Vector2(-22, 0)]), ic)
+	var key := Game.btn("jump") if kind == "jump" else Game.btn("guard")
+	var kl := Color(1, 1, 1) if not now else col.lightened(0.5)
+	ci.draw_rect(Rect2(c + Vector2(-60, r_in + 8), Vector2(120, 32)), Color(0, 0, 0, 0.7))
+	ci.draw_string(UI.FONT_BOLD, c + Vector2(-60, r_in + 33), key, HORIZONTAL_ALIGNMENT_CENTER, 120, 22, kl)
 
 
 func play_link_cutin(a: String, b: String, ld: Dictionary) -> void:

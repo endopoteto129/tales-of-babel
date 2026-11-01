@@ -168,16 +168,18 @@ func _run() -> void:
 	main.screen._show_scene_list()
 	await get_tree().create_timer(0.5).timeout
 	await shot("28_debug_scenes")
-	# 敵のターン（仲間の声かけ）
+	# ボスの大技の予告（仲間の声とアイコン）
 	main.busy = false
-	Game.floor_num = 2
-	main.goto("battle", {"enemies": ["soldier", "soldier"], "kind": "battle"})
+	Game.floor_num = 1
+	main.goto("battle", {"enemies": ["boss_beast"], "kind": "boss"})
 	await get_tree().create_timer(2.0).timeout
-	main.screen._start_enemy_turn()
-	await get_tree().create_timer(1.6).timeout
-	await shot("30_enemy_turn")
+	main.screen.enemies[0]._enemy_attack(2)
+	await get_tree().create_timer(1.0).timeout
+	await shot("30_boss_jump")
+	await get_tree().create_timer(1.5).timeout
+	await shot("30b_boss_jump_now")
 	# チュートリアル
-	main.show_tutorial("enemy_turn")
+	main.show_tutorial("boss_jump")
 	await get_tree().create_timer(0.6).timeout
 	await shot("31_tutorial")
 	for c in main.overlay.get_children():
@@ -185,7 +187,7 @@ func _run() -> void:
 			c.queue_free()
 	main.busy = false
 	Game.flags["tut_battle"] = true
-	Game.flags["tut_enemy_turn"] = true
+	Game.flags["tut_boss_jump"] = true
 	main.goto("menu", {"back": "map"})
 	await get_tree().create_timer(0.5).timeout
 	main.screen.tab = 6

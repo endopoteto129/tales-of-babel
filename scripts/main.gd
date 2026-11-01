@@ -172,8 +172,8 @@ func toast(text: String, kind: String = "info") -> void:
 	var l = UI.label(text, 18, col)
 	p.add_child(l)
 	p.modulate.a = 0.0
-	# バトル中は上のターン表示やボスのHPバーと重ならないよう下げる
-	toast_box.position.y = 140.0 if screen and screen.has_method("is_enemy_turn") else 14.0
+	# バトル中はボスのHPバーと重ならないよう下げる
+	toast_box.position.y = 84.0 if screen and screen.has_method("warning_state") else 14.0
 	toast_box.add_child(p)
 	var tw = p.create_tween()
 	tw.tween_property(p, "modulate:a", 1.0, 0.2)
