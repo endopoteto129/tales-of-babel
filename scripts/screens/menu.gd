@@ -407,4 +407,10 @@ func _system() -> void:
 	v.add_child(UI.button("セーブする", func() -> void:
 		Game.save_game()
 		Main.inst.toast("セーブしました", "info"), 20))
+	var depth_box = CheckBox.new()
+	depth_box.text = "バトルを 2.5D にする（試作：上下で奥行きを移動）"
+	depth_box.button_pressed = Game.battle_25d
+	depth_box.add_theme_font_size_override("font_size", 18)
+	depth_box.toggled.connect(func(on: bool) -> void: Game.set_battle_25d(on))
+	v.add_child(depth_box)
 	v.add_child(UI.button("タイトルへ戻る", func() -> void: Main.inst.goto("title"), 20))

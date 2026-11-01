@@ -61,15 +61,17 @@ func _draw() -> void:
 		draw_rect(Rect2(Vector2.ZERO, size), Color(0, 0, 0, 0.0))
 
 
-# assets/portraits/<キャラID>/<表情>.png。表情の画像が無ければ normal.png を使う
+# assets/portraits/<キャラID>/<表情>.png。表情の画像が無ければ normal を使う
 func _image() -> Texture2D:
 	var key := cid + "/" + expr
 	if not _tex_cache.has(key):
 		var tex: Texture2D = null
 		for e in [expr if expr != "" else "normal", "normal"]:
-			var path := "res://assets/portraits/%s/%s.png" % [cid, e]
-			if ResourceLoader.exists(path):
-				tex = load(path)
+			# <表情>.png と portrait.<キャラ>.<表情>.png のどちらの名前でも読む
+			for path in ["res://assets/portraits/%s/%s.png" % [cid, e], "res://assets/portraits/%s/portrait.%s.%s.png" % [cid, cid, e]]:
+				if tex == null and ResourceLoader.exists(path):
+					tex = load(path)
+			if tex:
 				break
 		_tex_cache[key] = tex
 	return _tex_cache[key]
@@ -151,7 +153,7 @@ func face_point() -> Vector2:
 	var tex := _image()
 	if tex:
 		var k: float = min(size.x / tex.get_width(), size.y / tex.get_height())
-		return Vector2(size.x / 2.0, size.y - tex.get_height() * k * 0.78)
+		return Vector2(size.x / 2.0, size.y - tex.get_height() * k * 0.76)
 	var s: float = min(size.x / 220.0, size.y / 260.0)
 	var hc := _head_c() if cid != "pots" else Vector2(0, -130)
 	return Vector2(size.x / 2.0, size.y) + hc * s

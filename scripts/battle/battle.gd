@@ -4,6 +4,11 @@ extends Node2D
 const LEFT := 40.0
 const RIGHT := 1240.0
 const GROUND_Y := 600.0
+# 2.5D（試作）：奥行き z を持たせる。z が大きいほど奥（画面の上・小さく描く）
+const Z_MAX := 130.0
+const Z_TO_Y := 0.75       # 奥行き1あたり、画面上で何ピクセル上にずらすか
+const DEPTH_HIT := 34.0    # この奥行き差までなら攻撃が当たる
+var depth := false
 
 const HudScript := preload("res://scripts/battle/battle_hud.gd")
 const BgScript := preload("res://scripts/battle/battle_bg.gd")
@@ -105,6 +110,10 @@ func _ready() -> void:
 	world.add_child(layer_fighters)
 	layer_fx = Node2D.new()
 	world.add_child(layer_fx)
+	depth = Game.battle_25d
+	bg.depth = depth
+	if depth:
+		layer_fx.z_index = 300   # 奥行き順に並べたキャラより手前に、技の演出を描く
 	var hl = CanvasLayer.new()
 	hl.layer = 10
 	add_child(hl)
@@ -121,6 +130,8 @@ func _ready() -> void:
 		f.setup_party(self, m, i == 0)
 		f.x = px - i * 80.0
 		f.facing = 1
+		if depth:
+			f.z = [60.0, 20.0, 100.0, 40.0][i % 4]
 		_add_fighter(f)
 		party.append(f)
 		if i == 0:
@@ -137,6 +148,8 @@ func _ready() -> void:
 		e.x = 900.0 + i * 110.0 if not e.data.get("boss", false) else 960.0
 		if ids.size() > 1 and e.data.get("boss", false):
 			e.x = 1000.0
+		if depth:
+			e.z = 60.0 if e.data.get("boss", false) else [60.0, 25.0, 100.0, 45.0][i % 4]
 		_add_fighter(e)
 		enemies.append(e)
 	player_target = enemies[0]
@@ -149,7 +162,7 @@ func _ready() -> void:
 func _add_fighter(f: Fighter) -> void:
 	fighters.append(f)
 	layer_fighters.add_child(f)
-	f.position = Vector2(f.x, GROUND_Y - f.h)
+	f.position = Vector2(f.x, f.ground_y() - f.h)
 
 
 func _intro() -> void:
@@ -553,7 +566,7 @@ func resolve_spell(caster: Fighter, aid: String, tgt: Fighter) -> void:
 		"spell":
 			if a.has("aoe"):
 				var tx: float = tgt.x if tgt else caster.x + caster.facing * 300
-				spawn_aoe(caster, a, tx, a.get("power", 1.0))
+				spawn_aoe(caster, a, tx, a.get("power", 1.0), tgt.z if tgt else -1.0)
 			elif a.has("projectile"):
 				var p: Dictionary = a["projectile"]
 				for i in range(p.get("count", 1)):
@@ -598,8 +611,9 @@ func spawn_projectile(f: Fighter, spec: Dictionary, power: float) -> void:
 	projectiles.append(p)
 
 
-func spawn_aoe(f: Fighter, spec: Dictionary, x: float, power: float) -> void:
+func spawn_aoe(f: Fighter, spec: Dictionary, x: float, power: float, z: float = -1.0) -> void:
 	var a = AoE.new()
+	a.z = z if z >= 0.0 else f.z
 	a.setup(self, f, spec, x, power)
 	layer_fx.add_child(a)
 	aoes.append(a)
@@ -1297,3 +1311,9 @@ func _tick_callout(delta: float) -> void:
 		callout_bubble.position.y = max(callout_bubble.position.y, 110)
 		if callout_t <= 0.0:
 			callout_bubble.queue_free()
+
+
+# ------------------------------------------------------------ 2.5D
+# 奥行きの差が小さければ当たる（2D のときは常に当たる）
+func depth_ok(za: float, zb: float, tol: float = DEPTH_HIT) -> bool:
+	return not depth or abs(za - zb) <= tol

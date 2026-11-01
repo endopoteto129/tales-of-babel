@@ -37,6 +37,13 @@ func _ready() -> void:
 	cont.disabled = not Game.has_save()
 	menu.add_child(cont)
 	menu.add_child(UI.button("操作説明", _show_help, 24))
+	var mode_btn = UI.button("", func() -> void: pass, 20)
+	var mode_text := func() -> String: return "バトル：" + ("2.5D（試作）" if Game.battle_25d else "2D") + "　（押すと切り替え）"
+	mode_btn.text = mode_text.call()
+	mode_btn.pressed.connect(func() -> void:
+		Game.set_battle_25d(not Game.battle_25d)
+		mode_btn.text = mode_text.call())
+	menu.add_child(mode_btn)
 	# エディタから実行したとき（デバッグビルド）だけ表示
 	menu.add_child(UI.button("デバッグ：層を選んで始める", _show_debug, 20))
 	menu.add_child(UI.button("デバッグ：シナリオ・スキットを見る", _show_scene_list, 20))

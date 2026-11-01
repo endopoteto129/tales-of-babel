@@ -64,6 +64,10 @@ const BREAK_TIME := 3.5
 var flash_t := 0.0
 var guard_t := 0.0
 var guard_pressed_at := -10.0
+var dodge_t := 0.0       # 回避（方向＋ガード）中の残り時間
+var dodge_cd := 0.0
+var z := 0.0             # 2.5D の奥行き（0 が手前）
+var vz := 0.0
 var down_t := 0.0
 var dead := false
 var fade := 1.0
@@ -162,7 +166,7 @@ func setup_enemy(b: Node, eid: String, scale: float) -> void:
 
 # ------------------------------------------------------------ 基本
 func ground_y() -> float:
-	return battle.GROUND_Y
+	return battle.GROUND_Y - z * battle.Z_TO_Y if battle.depth else battle.GROUND_Y
 
 
 func on_ground() -> bool:
@@ -214,6 +218,8 @@ func tick(dt: float) -> void:
 	state_t += dt
 	flash_t = max(0.0, flash_t - dt)
 	invul = max(0.0, invul - dt)
+	dodge_t = max(0.0, dodge_t - dt)
+	dodge_cd = max(0.0, dodge_cd - dt)
 	buffer_t = max(0.0, buffer_t - dt)
 	if buffer_t <= 0.0:
 		buffered = ""
@@ -280,6 +286,10 @@ func tick(dt: float) -> void:
 		else:
 			if battle.first_strike_t <= 0.0:
 				_enemy_ai(dt)
+		if battle.depth and not is_player:
+			_ai_depth()
+	elif battle.depth and not is_player:
+		vz = 0.0
 	_physics(dt)
 	queue_redraw()
 
@@ -319,27 +329,38 @@ func _physics(dt: float) -> void:
 	if state != "move":
 		vx = move_toward(vx, 0.0, fr * dt * 3.0)
 	x = clamp(x, battle.LEFT + body.x / 2.0, battle.RIGHT - body.x / 2.0)
+	if battle.depth:
+		z = clampf(z + vz * dt, 0.0, battle.Z_MAX)
+		# 奥ほど小さく、手前のキャラが上に重なるように描く
+		var sc: float = 1.0 - z / battle.Z_MAX * 0.2
+		scale = Vector2(sc, sc)
+		z_index = int(battle.Z_MAX - z)
 	position = Vector2(x, ground_y() - h)
 
 
 # ------------------------------------------------------------ プレイヤー操作
 func _player_control(dt: float) -> void:
 	var dir = Input.get_axis("move_left", "move_right")
+	var dz: float = Input.get_axis("move_down", "move_up") if battle.depth else 0.0
+	if dodge_t > 0.0:
+		return
 	var guarding = Input.is_action_pressed("guard") and on_ground()
 	if Input.is_action_just_pressed("guard"):
 		guard_pressed_at = battle.time
+		# 方向を入れながらガードで、その方向へ瞬時に回避
+		if on_ground() and Vector2(dir, dz).length() > 0.35 and dodge_cd <= 0.0:
+			_dodge(Vector2(dir, dz))
+			return
 	if guarding:
 		if state != "guard":
 			set_state("guard")
 			guard_t = 0.0
 		vx = 0.0
-		# ガード＋方向でステップ
-		if Input.is_action_just_pressed("move_left") or Input.is_action_just_pressed("move_right"):
-			var sd = -1 if Input.is_action_just_pressed("move_left") else 1
-			vx = sd * 620.0
-			invul = 0.22
-			set_state("move")
-			Sfx.play("jump", 0.7)
+		vz = 0.0
+		# ガード中に方向を入れても回避
+		if dodge_cd <= 0.0 and (Input.is_action_just_pressed("move_left") or Input.is_action_just_pressed("move_right") or (battle.depth and (Input.is_action_just_pressed("move_up") or Input.is_action_just_pressed("move_down")))):
+			_dodge(Vector2(dir, dz) if Vector2(dir, dz).length() > 0.35 else Vector2(-1 if Input.is_action_just_pressed("move_left") else 1, 0))
+			return
 		if Input.is_action_just_pressed("attack") or Input.is_action_just_pressed("arte"):
 			pass
 		else:
@@ -354,6 +375,7 @@ func _player_control(dt: float) -> void:
 		Sfx.play("jump")
 	if Input.is_action_just_pressed("attack"):
 		_auto_face()
+		_depth_assist()
 		start_normal()
 		return
 	if Input.is_action_just_pressed("arte"):
@@ -361,8 +383,10 @@ func _player_control(dt: float) -> void:
 		var slot = _dir_slot()
 		use_slot(slot)
 		return
-	if abs(dir) > 0.2:
-		facing = 1 if dir > 0 else -1
+	vz = dz * speed * 0.65
+	if abs(dir) > 0.2 or abs(dz) > 0.2:
+		if abs(dir) > 0.2:
+			facing = 1 if dir > 0 else -1
 		vx = dir * speed * (0.85 if not on_ground() else 1.0)
 		if on_ground() and state != "move":
 			set_state("move")
@@ -373,6 +397,31 @@ func _player_control(dt: float) -> void:
 				set_state("idle")
 
 
+# 回避：倒した方向へ一瞬で移動し、そのあいだは無敵
+func _dodge(v: Vector2) -> void:
+	var n := v.normalized()
+	if not battle.depth:
+		n = Vector2(signf(v.x) if v.x != 0.0 else float(-facing), 0)
+	dodge_t = 0.16
+	dodge_cd = 0.32
+	invul = max(invul, 0.3)
+	vx = n.x * 1150.0
+	vz = n.y * 800.0
+	set_state("move")
+	Sfx.play("jump", 0.7)
+	battle.spawn_fx("dust", Vector2(x, ground_y()), Color(1, 1, 1, 0.8), 0.8)
+
+
+# 2.5D：AI は狙う相手と同じ奥行きへ寄っていく
+func _ai_depth() -> void:
+	var t: Fighter = target if team == 1 else battle.nearest_enemy(self)
+	if t == null or not t.alive() or state not in ["idle", "move"]:
+		vz = 0.0
+		return
+	var dz: float = t.z - z
+	vz = signf(dz) * speed * 0.55 if abs(dz) > battle.DEPTH_HIT * 0.5 else 0.0
+
+
 func _dir_slot() -> int:
 	if Input.is_action_pressed("move_up"):
 		return 1
@@ -381,6 +430,16 @@ func _dir_slot() -> int:
 	if abs(Input.get_axis("move_left", "move_right")) > 0.3:
 		return 3
 	return 0
+
+
+# 2.5D：攻撃を出すとき、近くの狙っている敵の奥行きへ少し寄せる（空振りしにくく）
+func _depth_assist() -> void:
+	var t = battle.player_target
+	if not battle.depth or t == null or not t.alive():
+		return
+	var dz: float = t.z - z
+	if abs(dz) < 70.0:
+		z += clampf(dz, -24.0, 24.0)
 
 
 func _auto_face() -> void:
@@ -558,9 +617,11 @@ func _tick_act(dt: float) -> void:
 			act_spawned = 1
 			var tx = x + facing * act["aoe"].get("range", 260)
 			var tgt = battle.nearest_enemy(self) if team == 0 else target
+			var tz: float = z
 			if tgt and abs(tgt.x - x) < act["aoe"].get("range", 260) + 200:
 				tx = tgt.x
-			battle.spawn_aoe(self, act, tx, act.get("power", 1.0))
+				tz = tgt.z
+			battle.spawn_aoe(self, act, tx, act.get("power", 1.0), tz)
 		if act.has("reach") or (not act.has("projectile") and not act.has("aoe")):
 			_melee_hits()
 	else:
@@ -619,7 +680,7 @@ func _melee_hits() -> void:
 	for f in battle.opponents(self):
 		if not f.alive() or f.invul > 0.0:
 			continue
-		if not r.intersects(f.body_rect()):
+		if not r.intersects(f.body_rect()) or not battle.depth_ok(z, f.z):
 			continue
 		var rec: Array = act_hits.get(f, [0, -10.0])
 		if rec[0] >= hits or act_t - rec[1] < interval:
@@ -816,7 +877,8 @@ func _ally_ai(dt: float) -> void:
 						ai_t = 0.5
 						return
 					ai_t = randf_range(0.05, 0.35)
-					start_normal()
+					if battle.depth_ok(z, enemy.z):
+						start_normal()
 		"caster", "gunner":
 			var near = battle.nearest_enemy_dist(self)
 			var lo = 220.0 if role == "caster" else 200.0
@@ -900,7 +962,7 @@ func _enemy_ai(dt: float) -> void:
 				continue
 			if at.get("phase", 0) > phase_level():
 				continue
-			if dist <= at["range"]:
+			if dist <= at["range"] and (at.has("aoe") or battle.depth_ok(z, target.z)):
 				usable.append(i)
 		if not usable.is_empty():
 			# 大技を優先

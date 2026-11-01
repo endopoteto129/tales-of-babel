@@ -21,6 +21,8 @@ var team := 0
 var done := false
 var rnd: Array = []
 var heal_mode := false
+var z := 0.0            # 2.5D の奥行き
+var full_depth := false # 画面全体を覆う技は奥行きに関係なく当たる
 
 
 func setup(b: Node, f: Fighter, s: Dictionary, x: float, pw: float) -> void:
@@ -43,7 +45,10 @@ func setup(b: Node, f: Fighter, s: Dictionary, x: float, pw: float) -> void:
 	if asp.get("at_self", false):
 		cx = (battle.LEFT + battle.RIGHT) / 2.0
 		w = battle.RIGHT - battle.LEFT + 100
-	position = Vector2(cx, battle.GROUND_Y)
+	full_depth = asp.get("at_self", false) or w >= 900
+	if full_depth:
+		z = 0.0
+	position = Vector2(cx, battle.GROUND_Y - (z * battle.Z_TO_Y if battle.depth else 0.0))
 	for i in range(16):
 		rnd.append(Vector2(randf(), randf()))
 	if hits > 1 or shape in ["burst", "pillar", "meteor"]:
@@ -81,13 +86,15 @@ func _pulse() -> void:
 				Sfx.play("magic", 1.0, -4)
 	elif shape in ["pillar", "storm", "spikes"]:
 		Sfx.play("hit", 1.3, -10)
-	var r = Rect2(cx - w / 2.0, battle.GROUND_Y - hgt, w, hgt)
+	var r = Rect2(cx - w / 2.0, position.y - hgt, w, hgt)
 	for f in battle.opponents_of_team(team):
 		if not f.alive() or f.invul > 0.0:
 			continue
 		if shape == "quake" and f.h > 12.0:
 			continue
-		if r.intersects(f.body_rect()):
+		if full_depth and battle.depth:
+			r.position.y = f.ground_y() - hgt
+		if r.intersects(f.body_rect()) and (full_depth or battle.depth_ok(z, f.z, battle.DEPTH_HIT * 1.5)):
 			var d = int(sign(f.x - cx))
 			if d == 0:
 				d = 1

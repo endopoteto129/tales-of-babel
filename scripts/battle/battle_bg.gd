@@ -3,6 +3,7 @@ extends Node2D
 
 var deco := "grass"
 var boss := false
+var depth := false   # 2.5D（試作）のときは、奥行きのある地面を描く
 var t := 0.0
 var rnd: Array = []
 
@@ -120,6 +121,28 @@ func _draw() -> void:
 	for i in range(20):
 		var gx = rnd[i].x * 1300
 		draw_line(Vector2(gx, 612 + rnd[i].y * 20), Vector2(gx + 30, 612 + rnd[i].y * 20), gr.darkened(0.2), 2)
+	if depth:
+		_depth_floor(gr)
+
+
+# 奥へ向かって狭まる床。手前（y=600）から奥（Z_MAX の高さ）まで
+func _depth_floor(gr: Color) -> void:
+	var gy: float = 600.0
+	var back: float = gy - 130.0 * 0.75 - 14.0
+	var vp := Vector2(640, back - 260.0)   # 消失点
+	for i in range(12):
+		var y0 = lerpf(back, gy, i / 12.0)
+		var y1 = lerpf(back, gy, (i + 1) / 12.0)
+		draw_rect(Rect2(-40, y0, 1360, y1 - y0 + 1), gr.darkened(0.28 * (1.0 - i / 12.0)))
+	draw_line(Vector2(-40, back), Vector2(1320, back), gr.lightened(0.3), 3)
+	for i in range(5):
+		var y = lerpf(back, gy, (i + 1) / 6.0)
+		draw_line(Vector2(-40, y), Vector2(1320, y), Color(gr.darkened(0.35), 0.5), 1.5)
+	for i in range(-4, 17):
+		var bx = i * 100.0 - 160.0
+		var top = vp.lerp(Vector2(bx, gy), (back - vp.y) / (gy - vp.y))
+		draw_line(top, Vector2(bx, gy), Color(gr.darkened(0.35), 0.45), 1.5)
+	draw_rect(Rect2(-40, gy, 1360, 6), gr.lightened(0.25))
 
 
 func _elevator(acc: Color) -> void:

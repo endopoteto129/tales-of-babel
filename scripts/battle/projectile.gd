@@ -19,6 +19,8 @@ var size := Vector2(20, 20)
 var homing: Fighter
 var done := false
 var team := 0
+var z := 0.0            # 2.5D の奥行き。味方の弾は狙った敵の奥行きへ寄っていく
+var aim: Fighter
 
 
 func setup(b: Node, f: Fighter, s: Dictionary, pw: float) -> void:
@@ -43,16 +45,22 @@ func setup(b: Node, f: Fighter, s: Dictionary, pw: float) -> void:
 		if f.h > 20:
 			start.y = f.center().y
 	position = start
+	z = f.z
 	vel = Vector2(f.facing * spd, 0)
 	var tgt: Fighter = battle.player_target if (f.is_player and battle.player_target) else (battle.nearest_enemy(f) if f.team == 0 else f.target)
+	if team == 0:
+		aim = tgt
 	if tgt and tgt.alive():
 		var to = tgt.center() - start
+		if battle.depth:
+			to.y += (tgt.z - f.z) * battle.Z_TO_Y   # 奥行きの差は高さとして扱わない
 		if abs(to.x) > 10 and sign(to.x) == f.facing and shape != "wave":
 			vel = to.normalized() * spd
 			if abs(vel.y) > abs(vel.x) * 0.6:
 				vel = Vector2(f.facing * spd * 0.85, sign(to.y) * spd * 0.5)
 	if ps.get("homing", false):
 		homing = tgt
+		aim = tgt
 
 
 func tick(dt: float) -> void:
@@ -63,6 +71,10 @@ func tick(dt: float) -> void:
 		var to = (homing.center() - position).normalized() * vel.length()
 		vel = vel.lerp(to, min(1.0, dt * 2.5))
 	position += vel * dt
+	if battle.depth and aim and aim.alive():
+		var nz: float = move_toward(z, aim.z, (260.0 if team == 0 else 90.0) * dt)
+		position.y -= (nz - z) * battle.Z_TO_Y
+		z = nz
 	if t >= life or position.x < battle.LEFT - 60 or position.x > battle.RIGHT + 60:
 		done = true
 		queue_free()
@@ -71,7 +83,7 @@ func tick(dt: float) -> void:
 	for f in battle.opponents_of_team(team):
 		if not f.alive() or f.invul > 0.0:
 			continue
-		if not r.intersects(f.body_rect()):
+		if not r.intersects(f.body_rect()) or not battle.depth_ok(z, f.z):
 			continue
 		var rec: Array = hits.get(f, [0, -10.0])
 		if rec[0] >= multi or t - rec[1] < 0.09:
