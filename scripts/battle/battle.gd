@@ -697,6 +697,39 @@ func boss_warning(f: Fighter, text: String, spec: Dictionary) -> void:
 		_tutorial("boss_guard")
 
 
+# 2.5D の床に予告が出る技。仲間が声をかける
+func on_depth_attack(f: Fighter, at: Dictionary) -> void:
+	_tutorial("depth_attack")
+	if f.data.get("boss", false) or randf() < 0.5:
+		callout(at["depth_kind"], f)
+
+
+# 2.5D：f が敵の技の予告範囲に入っていれば、逃げる向き（x, z）を返す
+func danger_escape(f: Fighter) -> Vector2:
+	for a in aoes:
+		if not is_instance_valid(a) or a.team == f.team or a.t >= a.delay or a.dz < 0.0:
+			continue
+		var in_x: bool = abs(f.x - a.cx) < a.w / 2.0 + f.body.x / 2.0
+		var in_z: bool = a.full_depth or abs(f.z - a.z) < a.dz + 10.0
+		if not (in_x and in_z):
+			continue
+		match a.shape:
+			"lane":
+				var dir: float = signf(f.z - a.z)
+				if dir == 0.0:
+					dir = 1.0 if f.z < Z_MAX / 2.0 else -1.0
+				# 端に追い詰められていたら反対側へ抜ける
+				if (dir > 0.0 and f.z > Z_MAX - 4.0) or (dir < 0.0 and f.z < 4.0):
+					dir = -dir
+				return Vector2(0, dir)
+			"column":
+				return Vector2(1.0 if f.x >= a.cx else -1.0, 0)
+			_:
+				var away := Vector2(f.x - a.cx, (f.z - a.z) * 3.0)
+				return away.normalized() if away.length() > 1.0 else Vector2(1, 0)
+	return Vector2.ZERO
+
+
 # 大技の予告中なら [種類, 当たるまでの残り秒, 予告の長さ] を返す
 func warning_state() -> Array:
 	if warn_f == null or not is_instance_valid(warn_f) or not warn_f.alive() or warn_f.state != "act" or warn_f.act != warn_spec:

@@ -132,6 +132,8 @@ func setup_enemy(b: Node, eid: String, scale: float) -> void:
 	team = 1
 	cid = eid
 	data = DB.enemy(eid)
+	if battle.depth:
+		data = DB.DepthAttacks.augment(data, battle.kind)
 	role = data["ai"]
 	display_name = data["name"]
 	var st: Dictionary = data["stats"]
@@ -288,6 +290,8 @@ func tick(dt: float) -> void:
 				_enemy_ai(dt)
 		if battle.depth and not is_player:
 			_ai_depth()
+			if team == 0:
+				_ai_escape()
 	elif battle.depth and not is_player:
 		vz = 0.0
 	_physics(dt)
@@ -420,6 +424,19 @@ func _ai_depth() -> void:
 		return
 	var dz: float = t.z - z
 	vz = signf(dz) * speed * 0.55 if abs(dz) > battle.DEPTH_HIT * 0.5 else 0.0
+
+
+# 2.5D：味方AIは、床に予告された敵の技の範囲から逃げる
+func _ai_escape() -> void:
+	var v: Vector2 = battle.danger_escape(self)
+	if v == Vector2.ZERO:
+		return
+	vx = v.x * speed
+	vz = v.y * speed * 0.8
+	if abs(v.x) > 0.1:
+		facing = 1 if v.x > 0 else -1
+	if state != "move" and on_ground():
+		set_state("move")
 
 
 func _dir_slot() -> int:
@@ -1021,6 +1038,8 @@ func _enemy_attack(i: int) -> void:
 	_begin_act(at, 1, at["name"] if (role == "boss" or at.has("warn")) else "")
 	if at.has("warn"):
 		battle.boss_warning(self, at["warn"], act)
+	elif at.has("depth_kind"):
+		battle.on_depth_attack(self, at)
 	if at.has("aoe") and at["aoe"].get("at_self", false):
 		pass
 	vx = 0.0

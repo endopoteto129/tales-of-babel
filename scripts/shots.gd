@@ -178,6 +178,16 @@ func _run() -> void:
 	await shot("30_boss_jump")
 	await get_tree().create_timer(1.5).timeout
 	await shot("30b_boss_jump_now")
+	if Game.battle_25d:
+		# 2.5D：床に予告が出る技（横一列・縦一列・円）
+		var boss_f = main.screen.enemies[0]
+		var n: int = boss_f.data["attacks"].size()
+		for k in range(3):
+			var at: Dictionary = boss_f.data["attacks"][n - 3 + k].duplicate(true)
+			main.screen.spawn_aoe(boss_f, at, main.screen.player.x, 1.0, main.screen.player.z)
+			await get_tree().create_timer(0.9).timeout
+			await shot("33_depth_%d" % k)
+			await get_tree().create_timer(1.0).timeout
 	# チュートリアル
 	main.show_tutorial("boss_jump")
 	await get_tree().create_timer(0.6).timeout

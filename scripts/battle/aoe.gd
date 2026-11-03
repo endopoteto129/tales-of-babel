@@ -23,6 +23,7 @@ var rnd: Array = []
 var heal_mode := false
 var z := 0.0            # 2.5D の奥行き
 var full_depth := false # 画面全体を覆う技は奥行きに関係なく当たる
+var dz := -1.0          # 奥行き方向の半分の幅（2.5D 用の技。-1 なら従来どおり）
 
 
 func setup(b: Node, f: Fighter, s: Dictionary, x: float, pw: float) -> void:
@@ -45,7 +46,8 @@ func setup(b: Node, f: Fighter, s: Dictionary, x: float, pw: float) -> void:
 	if asp.get("at_self", false):
 		cx = (battle.LEFT + battle.RIGHT) / 2.0
 		w = battle.RIGHT - battle.LEFT + 100
-	full_depth = asp.get("at_self", false) or w >= 900
+	dz = asp.get("dz", -1.0)
+	full_depth = (dz < 0.0 and (asp.get("at_self", false) or w >= 900)) or dz >= battle.Z_MAX
 	if full_depth:
 		z = 0.0
 	position = Vector2(cx, battle.GROUND_Y - (z * battle.Z_TO_Y if battle.depth else 0.0))
@@ -92,17 +94,69 @@ func _pulse() -> void:
 			continue
 		if shape == "quake" and f.h > 12.0:
 			continue
-		if full_depth and battle.depth:
+		if (full_depth or dz >= 0.0) and battle.depth:
 			r.position.y = f.ground_y() - hgt
-		if r.intersects(f.body_rect()) and (full_depth or battle.depth_ok(z, f.z, battle.DEPTH_HIT * 1.5)):
+		var hit_depth: bool = full_depth or (battle.depth_ok(z, f.z, dz + 10.0) if dz >= 0.0 else battle.depth_ok(z, f.z, battle.DEPTH_HIT * 1.5))
+		if shape == "circle" and battle.depth:
+			var ex: float = (f.x - cx) / (w / 2.0 + f.body.x / 2.0)
+			var ez: float = (f.z - z) / max(1.0, dz + 10.0)
+			hit_depth = ex * ex + ez * ez <= 1.0 and f.h < hgt
+		if r.intersects(f.body_rect()) and hit_depth:
 			var d = int(sign(f.x - cx))
 			if d == 0:
 				d = 1
 			battle.apply_hit(owner_f, f, spec, power, true, d)
 
 
+# 床の上の範囲（奥行き z0〜z1）を、この技の位置からの相対座標で返す
+func _floor_y(zz: float) -> float:
+	return -(zz - z) * battle.Z_TO_Y
+
+
+func _floor_quad(x0: float, x1: float, z0: float, z1: float) -> PackedVector2Array:
+	return PackedVector2Array([Vector2(x0, _floor_y(z0)), Vector2(x1, _floor_y(z0)), Vector2(x1, _floor_y(z1)), Vector2(x0, _floor_y(z1))])
+
+
+# 2.5D：床に攻撃範囲を描く（予告中は赤く点滅し、当たる瞬間に向けて中が満ちていく）
+func _draw_floor_marker(p: float, active: float) -> void:
+	var col := Color(1.0, 0.2, 0.15) if team == 1 else Color(color.r, color.g, color.b)
+	var a: float = 0.34 + 0.14 * sin(t * 24.0) if active <= 0.0 else active * 0.6
+	var z0: float = 0.0 if full_depth else max(0.0, z - dz)
+	var z1: float = battle.Z_MAX if full_depth else min(battle.Z_MAX, z + dz)
+	if shape == "circle":
+		var ry: float = dz * battle.Z_TO_Y
+		var pts := PackedVector2Array()
+		for i in range(33):
+			var ang := TAU * i / 32.0
+			pts.append(Vector2(cos(ang) * w / 2.0, sin(ang) * ry))
+		UI.poly(self, pts, Color(col.r, col.g, col.b, a * 0.6))
+		var inner := PackedVector2Array()
+		for q in pts:
+			inner.append(q * p)
+		UI.poly(self, inner, Color(col.r, col.g, col.b, a))
+		draw_polyline(pts, Color(col.r, col.g, col.b, 0.9), 3.0)
+		return
+	var x0: float = -w / 2.0
+	var x1: float = w / 2.0
+	UI.poly(self, _floor_quad(x0, x1, z0, z1), Color(col.r, col.g, col.b, a * 0.55))
+	if active <= 0.0:
+		# 満ちていく向き：横一列は左右から、縦一列は奥から
+		if shape == "column":
+			UI.poly(self, _floor_quad(x0, x1, z1 - (z1 - z0) * p, z1), Color(col.r, col.g, col.b, a))
+		else:
+			UI.poly(self, _floor_quad(-w / 2.0 * p, w / 2.0 * p, z0, z1), Color(col.r, col.g, col.b, a))
+	var outline := _floor_quad(x0, x1, z0, z1)
+	outline.append(outline[0])
+	draw_polyline(outline, Color(col.r, col.g, col.b, 0.9), 3.0)
+
+
 func _draw() -> void:
 	var k = 0.0
+	var floor_mark: bool = battle.depth and team == 1 and (dz >= 0.0 or full_depth)
+	if floor_mark and t < delay:
+		_draw_floor_marker(t / max(0.01, delay), 0.0)
+		if shape in ["lane", "column", "circle"]:
+			return
 	if t < delay:
 		# 予告
 		var p = t / max(0.01, delay)
@@ -116,7 +170,24 @@ func _draw() -> void:
 	k = (t - delay) / max(0.01, hits * interval + 0.45)
 	var a: float = clamp(1.0 - k, 0.0, 1.0)
 	var c = Color(color.r, color.g, color.b, a)
+	if floor_mark and shape in ["lane", "column", "circle"]:
+		_draw_floor_marker(1.0, a)
 	match shape:
+		"lane":
+			# 床を走る衝撃（奥行きをずらせばかわせる）
+			for i in range(16):
+				var xx5: float = -w / 2 + w * rnd[i].x
+				var zz5: float = z + (rnd[i].y - 0.5) * dz * 1.6
+				var base := Vector2(xx5, _floor_y(zz5))
+				draw_line(base, base + Vector2(4, -40 - rnd[i].x * 60 * a), Color(c.r, c.g, c.b, a), 5.0)
+		"column":
+			# 奥から手前へ突き抜ける光の柱（左右にかわす）
+			draw_rect(Rect2(-w / 2, _floor_y(battle.Z_MAX) - hgt, w, hgt + battle.Z_MAX * battle.Z_TO_Y), Color(c.r, c.g, c.b, a * 0.35))
+			draw_line(Vector2(0, _floor_y(battle.Z_MAX) - hgt), Vector2(0, _floor_y(0.0)), Color(1, 1, 1, a), 6.0)
+		"circle":
+			var r3: float = w / 2.0 * (0.6 + k * 0.5)
+			draw_circle(Vector2(0, -hgt * 0.35), r3 * 0.7, Color(c.r, c.g, c.b, a * 0.5))
+			draw_circle(Vector2(0, -hgt * 0.35), r3 * 0.4, Color(1, 1, 0.9, a * 0.7))
 		"pillar":
 			for i in range(5):
 				var xx: float = -w / 2 + w * rnd[i].x
