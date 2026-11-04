@@ -13,6 +13,8 @@ var depth := false
 const HudScript := preload("res://scripts/battle/battle_hud.gd")
 const BgScript := preload("res://scripts/battle/battle_bg.gd")
 const CompanionScript := preload("res://scripts/battle/companions.gd")
+const OUTLINE_SHADER := preload("res://shaders/outline.gdshader")
+var player_group: CanvasGroup
 
 var params: Dictionary = {}
 var kind := "battle"
@@ -54,11 +56,11 @@ var ovl := 0.0           # オーバーリミッツゲージ（0〜100）
 var ovl_t := 0.0         # オーバーリミッツの残り時間
 const OVL_TIME := 10.0
 # ゲージのたまりやすさ（1ヒットあたり）。OVLはボス戦で1回、絆はそれより少し多く満タンになる目安
-const LINK_PER_HIT := 0.18
-const LINK_PER_CHAIN := 0.45
-const LINK_PER_CHEER := 5.0
-const OVL_PER_HIT := 0.6      # レン自身の攻撃と被弾でだけたまる
-const OVL_PER_DAMAGE := 2.5
+const LINK_PER_HIT := 0.36
+const LINK_PER_CHAIN := 0.9
+const LINK_PER_CHEER := 10.0
+const OVL_PER_HIT := 1.2      # レン自身の攻撃と被弾でだけたまる
+const OVL_PER_DAMAGE := 5.0
 const MYSTIC_PER_HIT := 2.5   # オーバーリミッツ中だけたまる
 var finish_target: Fighter     # とどめ待ちのボス
 var finishing := false
@@ -161,7 +163,18 @@ func _ready() -> void:
 
 func _add_fighter(f: Fighter) -> void:
 	fighters.append(f)
-	layer_fighters.add_child(f)
+	if f.is_player:
+		# 操作キャラは輪郭線で目立たせる（CanvasGroup に入れて縁取りのシェーダーをかける）
+		var g := CanvasGroup.new()
+		g.fit_margin = 8.0
+		var mat := ShaderMaterial.new()
+		mat.shader = OUTLINE_SHADER
+		g.material = mat
+		layer_fighters.add_child(g)
+		g.add_child(f)
+		player_group = g
+	else:
+		layer_fighters.add_child(f)
 	f.position = Vector2(f.x, f.ground_y() - f.h)
 
 
@@ -811,7 +824,7 @@ func try_link() -> void:
 		return
 	frozen = false
 	var spec = {"aoe": {"w": 1400, "h": 700, "delay": 0.05, "hits": ld.get("hits", 8), "interval": 0.08, "shape": ld.get("shape", "burst"), "at_self": true},
-		"power": ld.get("power", 6.0) / ld.get("hits", 8), "color": ld.get("color", Color(1, 0.8, 0.4)), "link": true, "knock": 40, "launch": 200,
+		"power": ld.get("power", 6.0) * 0.5 / ld.get("hits", 8), "color": ld.get("color", Color(1, 0.8, 0.4)), "link": true, "knock": 40, "launch": 200,
 		"element": ld.get("element", "")}
 	spawn_aoe(player, spec, 640, spec["power"])
 	flash(Color(1, 1, 1, 0.8))

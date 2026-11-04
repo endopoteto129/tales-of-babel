@@ -339,6 +339,10 @@ func _physics(dt: float) -> void:
 		var sc: float = 1.0 - z / battle.Z_MAX * 0.2
 		scale = Vector2(sc, sc)
 		z_index = int(battle.Z_MAX - z)
+		if is_player and get_parent() is CanvasGroup:
+			# 輪郭線の入れ物ごと奥行き順に並べる
+			get_parent().z_index = z_index
+			z_index = 0
 	position = Vector2(x, ground_y() - h)
 
 
@@ -348,11 +352,15 @@ func _player_control(dt: float) -> void:
 	var dz: float = Input.get_axis("move_down", "move_up") if battle.depth else 0.0
 	if dodge_t > 0.0:
 		return
+	# 回避ボタン（パッドは RT）：倒している方向へ。倒していなければ後ろへ
+	if Input.is_action_just_pressed("dodge") and on_ground() and dodge_cd <= 0.0 and state in ["idle", "move", "guard"]:
+		_dodge(Vector2(dir, dz) if Vector2(dir, dz).length() > 0.35 else Vector2(-facing, 0))
+		return
 	var guarding = Input.is_action_pressed("guard") and on_ground()
 	if Input.is_action_just_pressed("guard"):
 		guard_pressed_at = battle.time
-		# 方向を入れながらガードで、その方向へ瞬時に回避
-		if on_ground() and Vector2(dir, dz).length() > 0.35 and dodge_cd <= 0.0:
+		# キーボードでは、方向を入れながらガードでも回避できる（パッドは RT）
+		if not Game.pad_mode and on_ground() and Vector2(dir, dz).length() > 0.35 and dodge_cd <= 0.0:
 			_dodge(Vector2(dir, dz))
 			return
 	if guarding:
@@ -362,7 +370,7 @@ func _player_control(dt: float) -> void:
 		vx = 0.0
 		vz = 0.0
 		# ガード中に方向を入れても回避
-		if dodge_cd <= 0.0 and (Input.is_action_just_pressed("move_left") or Input.is_action_just_pressed("move_right") or (battle.depth and (Input.is_action_just_pressed("move_up") or Input.is_action_just_pressed("move_down")))):
+		if not Game.pad_mode and dodge_cd <= 0.0 and (Input.is_action_just_pressed("move_left") or Input.is_action_just_pressed("move_right") or (battle.depth and (Input.is_action_just_pressed("move_up") or Input.is_action_just_pressed("move_down")))):
 			_dodge(Vector2(dir, dz) if Vector2(dir, dz).length() > 0.35 else Vector2(-1 if Input.is_action_just_pressed("move_left") else 1, 0))
 			return
 		if Input.is_action_just_pressed("attack") or Input.is_action_just_pressed("arte"):
@@ -746,7 +754,7 @@ func take_hit(dmg: int, knock: float, launch: float, from_dir: int, stun: float,
 	if is_player and battle.ovl_t > 0.0:
 		return  # オーバーリミッツ中はのけぞらない
 	if armor_max > 0.0 and break_t <= 0.0:
-		armor -= dmg * 0.6 + 6
+		armor -= (dmg * 0.6 + 6) * 0.5   # 割れるまでの時間は以前の倍
 		armor_regen_t = 3.5
 		if resist_t > 0.0:
 			# ブレイク明けの立て直し中は割れない
