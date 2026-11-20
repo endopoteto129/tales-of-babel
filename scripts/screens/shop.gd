@@ -47,6 +47,16 @@ func _ready() -> void:
 
 
 func _make_stock() -> void:
+	# 同じ層の行商人は品ぞろえを覚えておく（何度訪ねても加護の護符が変わらない）
+	if Game.map.has("shop_stock") and int(Game.map.get("shop_floor", -1)) == Game.floor_num:
+		stock = Game.map["shop_stock"]
+		return
+	_roll_stock()
+	Game.map["shop_stock"] = stock
+	Game.map["shop_floor"] = Game.floor_num
+
+
+func _roll_stock() -> void:
 	stock = ["apple_gel", "orange_gel", "lemon_gel", "life_bottle"]
 	if Game.floor_num >= 2:
 		stock.append("mixed_gel")

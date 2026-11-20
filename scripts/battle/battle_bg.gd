@@ -25,6 +25,18 @@ func _draw() -> void:
 	var top: Color = fd["bg_top"]
 	var bot: Color = fd["bg_bottom"]
 	var gr: Color = fd["ground"]
+	# ドット絵の背景（320×180）があればそれを使う。ボス戦用（_boss）があればボス戦ではそちら
+	var pix: Texture2D = null
+	if boss:
+		pix = PixelArt.tex("battle_bg/%s_boss.png" % deco)
+	if pix == null:
+		pix = PixelArt.tex("battle_bg/%s.png" % deco)
+	if pix:
+		texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		draw_texture_rect(pix, Rect2(0, 0, 1280, 720), false)
+		if depth:
+			_depth_floor(gr)
+		return
 	if boss:
 		top = top.lerp(Color(0.25, 0.05, 0.08), 0.35)
 	for i in range(30):

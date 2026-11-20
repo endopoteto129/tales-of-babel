@@ -1228,6 +1228,7 @@ func _victory() -> void:
 		gald += int(e.data.get("gald", 10) * DB.floor_data(Game.floor_num)["scale"])
 		if randf() < (0.35 if not e.data.get("boss", false) else 1.0):
 			drops.append(["apple_gel", "orange_gel", "apple_gel", "lemon_gel", "mixed_gel", "life_bottle"][randi() % (4 if Game.floor_num < 3 else 6)])
+	exp = int(exp * DB.Floors.EXP_MULT)
 	if kind == "elite":
 		exp = int(exp * 1.4)
 		gald = int(gald * 1.5)

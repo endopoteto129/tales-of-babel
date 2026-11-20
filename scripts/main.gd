@@ -57,6 +57,9 @@ func _ready() -> void:
 	if "--repro" in args:
 		add_child(load("res://scripts/repro.gd").new())
 		return
+	if "--fieldtest" in args:
+		add_child(load("res://scripts/fieldtest.gd").new())
+		return
 	if "--autotest" in args:
 		var t: Node = load("res://scripts/autotest.gd").new()
 		add_child(t)

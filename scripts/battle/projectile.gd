@@ -103,6 +103,14 @@ func tick(dt: float) -> void:
 func _draw() -> void:
 	var c = color
 	var dir = 1.0 if vel.x >= 0 else -1.0
+	var pix: Texture2D = PixelArt.tex("fx/proj_%s.png" % shape)
+	if pix:
+		texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		var n: int = PixelArt.strip_frames(pix)
+		draw_set_transform(Vector2.ZERO, vel.angle() if shape in ["lance", "bullet"] else 0.0, Vector2(1, 1))
+		PixelArt.draw_strip(self, pix, int(Time.get_ticks_msec() / 80) % n, Vector2.ZERO, c, PixelArt.SCALE, dir < 0 and not shape in ["lance", "bullet"])
+		draw_set_transform(Vector2.ZERO)
+		return
 	match shape:
 		"wave":
 			var pts = PackedVector2Array()

@@ -23,12 +23,16 @@ static func draw_fighter(f: Fighter) -> void:
 			var px = sin(f.anim_t * 3.0 + i * 1.7) * f.body.x * 0.6
 			var py = -fmod(f.anim_t * 120.0 + i * 37.0, B0 * 1.2)
 			f.draw_circle(Vector2(px, py), 3.0, Color(1.0, 0.9, 0.5, 0.8 * a))
-	f.draw_set_transform(Vector2.ZERO, 0.0, Vector2(f.facing, 1))
-	if f.team == 0:
-		_draw_hero(f, a)
+	var sheet: Texture2D = PixelArt.tex("battle/%s.png" % f.cid)
+	if sheet:
+		_draw_sheet(f, sheet, a)
 	else:
-		_draw_enemy(f, a)
-	f.draw_set_transform(Vector2.ZERO)
+		f.draw_set_transform(Vector2.ZERO, 0.0, Vector2(f.facing, 1))
+		if f.team == 0:
+			_draw_hero(f, a)
+		else:
+			_draw_enemy(f, a)
+		f.draw_set_transform(Vector2.ZERO)
 	# ガード
 	if f.state == "guard":
 		var gc = Color(0.5, 0.8, 1.0, 0.45 + sin(f.anim_t * 20.0) * 0.1)
@@ -39,6 +43,76 @@ static func draw_fighter(f: Fighter) -> void:
 		var top = -f.body.y - 28
 		f.draw_string(UI.FONT_BOLD, Vector2(-8, top), "!", HORIZONTAL_ALIGNMENT_LEFT, -1, 34, Color(1.0, 0.3 + k * 0.5, 0.2, a))
 		f.draw_circle(Vector2(0, -f.body.y / 2.0), f.body.x * (0.4 + k * 0.5), Color(1, 0.2, 0.1, 0.12 * k))
+
+
+# ------------------------------------------------------------ ドット絵のシート（8列。行は下の表）
+# 味方: 0 待機(4) 1 走る(6) 2 ジャンプ(2:上昇/下降) 3 ガード(2) 4 通常攻撃1段目(4) 5 2段目(4) 6 3段目(4)
+#       7 術技・特技(6) 8 詠唱(4) 9 のけぞり(2) 10 ダウン(3:倒れる/倒れたまま/起き上がる) 11 勝利(4)
+# 敵:   0 待機(4) 1 移動(4) 2 予備動作(2) 3 攻撃(4) 4 のけぞり(2) 5 ダウン(3)
+const HERO_FRAMES := [4, 6, 2, 2, 4, 4, 4, 6, 4, 2, 3, 4]
+const ENEMY_FRAMES := [4, 4, 2, 4, 2, 3]
+
+
+static func sheet_frame(f: Fighter) -> Vector2i:
+	var t: float = f.anim_t
+	var total: float = f.act.get("startup", 0.1) + f.act.get("active", 0.1) + f.act.get("recovery", 0.2)
+	var k: float = clamp(f.act_t / max(0.01, total), 0.0, 0.999)
+	if f.team == 0:
+		match f.state:
+			"move":
+				return Vector2i(int(t * 12.0) % 6, 1)
+			"jump":
+				return Vector2i(0 if f.vy < 0.0 else 1, 2)
+			"guard":
+				return Vector2i(0 if f.state_t < 0.08 else 1, 3)
+			"act", "link":
+				if f.act_level == 0 and f.state == "act":
+					return Vector2i(int(k * 4.0), 4 + min(f.combo_idx, 2))
+				return Vector2i(int(k * 6.0), 7)
+			"cast":
+				return Vector2i(int(t * 8.0) % 4, 8)
+			"hit":
+				return Vector2i(int(f.state_t * 10.0) % 2, 9)
+			"down":
+				return Vector2i(0 if f.state_t < 0.2 else (2 if f.down_t < 0.25 and f.down_t > 0.0 else 1), 10)
+			"dead":
+				return Vector2i(1, 10)
+			"win":
+				return Vector2i(int(t * 6.0) % 4, 11)
+		return Vector2i(int(t * 6.0) % 4, 0)
+	match f.state:
+		"move", "jump":
+			return Vector2i(int(t * 8.0) % 4, 1)
+		"act":
+			if f.act_t < f.act.get("startup", 0.0):
+				return Vector2i(int(t * 8.0) % 2, 2)
+			var su: float = f.act.get("startup", 0.0)
+			var k2: float = clamp((f.act_t - su) / max(0.01, total - su), 0.0, 0.999)
+			return Vector2i(int(k2 * 4.0), 3)
+		"cast":
+			return Vector2i(int(t * 8.0) % 2, 2)
+		"hit":
+			return Vector2i(int(f.state_t * 10.0) % 2, 4)
+		"down":
+			return Vector2i(0 if f.state_t < 0.2 else 1, 5)
+		"dead":
+			return Vector2i(2, 5)
+	return Vector2i(int(t * 6.0) % 4, 0)
+
+
+static func _draw_sheet(f: Fighter, sheet: Texture2D, a: float) -> void:
+	var cell: float = sheet.get_width() / 8.0
+	var rows: int = max(1, int(round(sheet.get_height() / cell)))
+	var fr: Vector2i = sheet_frame(f)
+	var mod := Color(1, 1, 1, a)
+	if f.flash_t > 0.0:
+		mod = Color(2.2, 2.2, 2.2, a)
+	elif f.invul > 0.0 and fmod(f.anim_t, 0.12) < 0.06 and f.team == 0:
+		mod.a = 0.5 * a
+	if f.state == "dead" and f.team == 1:
+		mod.a *= 0.8
+	f.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	PixelArt.draw_cell(f, sheet, 8, rows, fr.x, min(fr.y, rows - 1), Vector2.ZERO, f.facing < 0, mod)
 
 
 static func _ellipse(f: Node2D, c: Vector2, rx: float, ry: float, col: Color) -> void:

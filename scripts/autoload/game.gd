@@ -12,7 +12,7 @@ var party: Array = []          # パーティメンバーの状態 Dictionary
 var gald := 0
 var items: Dictionary = {}
 var floor_num := 1
-var map: Dictionary = {}       # {"nodes": {id: node}, "current": id, "start": true}
+var map: Dictionary = {}       # 探索マップの状態（init_field を参照）
 var floor_buffs: Array = []    # 層限定の加護 id
 var meal: Dictionary = {}      # {"id": recipe_id, "left": 3}
 var flags: Dictionary = {}
@@ -31,7 +31,7 @@ var pad_mode := false  # 最後の入力がゲームパッドなら true（ボ�
 var quiet := false  # true の間は通知（トースト）を出さない（デバッグジャンプ用）
 
 # 通常プレイでの想定レベル（層の開始時 / ボス戦時）。バランス確認とデバッグジャンプで使う
-const EXPECTED_LV_START := [2, 4, 6, 9, 11, 14, 16]
+const EXPECTED_LV_START := [2, 4, 6, 9, 12, 15, 17]
 const EXPECTED_LV_BOSS := [3, 5, 8, 10, 13, 15, 17]
 
 
@@ -85,11 +85,11 @@ func controls_text(battle_only: bool = false) -> String:
 	if pad_mode:
 		t = "[b]バトル（ゲームパッド）[/b]\n移動：左スティック／十字キー　通常攻撃：X\n術技：B（＋方向なしで1種、十字キー↑/↓/←→で計4種）\nジャンプ：A　ガード：LB　回避：RT（スティックを倒した方向へ）\nターゲット切替：RB　共鳴秘技：LT（絆ゲージ満タン時）\nオーバーリミッツ：Y（OVLゲージ満タン時）\n秘奥義：オーバーリミッツ中に Y（秘奥義ゲージ100%以上）\n仲間に術技を指示：右スティック ←↑→　メニュー：START"
 		if not battle_only:
-			t += "\n\n[b]マップ[/b]\n左右でルート選択、A で進む。スキット：BACK　メニュー：START"
+			t += "\n\n[b]マップ[/b]\n移動：左スティック　調べる：A　ダッシュ：LB を押しながら\nスキット：BACK　メニュー：START"
 	else:
 		t = "[b]バトル（キーボード）[/b]\n移動：A/D・←→　通常攻撃：J（Z）\n術技：K（X）＋方向なし/↑/↓/←→で4種\nジャンプ：Space（C）　ガード：L（Shift）　方向キー＋ガードで回避\nターゲット切替：Tab（Q）　共鳴秘技：U（V）（絆ゲージ満タン時）\nオーバーリミッツ：I（B）（OVLゲージ満タン時）\n秘奥義：オーバーリミッツ中に I（秘奥義ゲージ100%以上）\n仲間に術技を指示：1/2/3　メニュー：Esc\n（デバッグ：F9 で敵のHPを残り10に）"
 		if not battle_only:
-			t += "\n\n[b]マップ[/b]\n←→でルート選択、Enter で進む。スキット：T　メニュー：M"
+			t += "\n\n[b]マップ[/b]\n移動：WASD・矢印キー　調べる：Enter（J）　ダッシュ：Shift を押しながら\nスキット：T　メニュー：M"
 	t += "\n\n[b]回避[/b]\n回避ボタン（パッドは RT、キーボードは O か「方向＋ガード」）で、倒している方向へ一瞬で移動して攻撃をかわす（移動中は無敵）。\n2.5D（試作）では上下で奥行きを移動でき、回避も奥・手前に出せる。"
 	t += "\n\n[b]ボスの大技[/b]\nボスが大技を構えると、仲間が声をかけ、レンの頭上に対処方法のアイコンが出る。\n矢印なら「ジャンプ」、盾なら「ガード」。外側の輪が内側の円に重なる瞬間に攻撃が来る。"
 	t += "\n\n[b]テイルズ流のコツ[/b]\n通常攻撃 → 特技 → 奥義 の順にキャンセルして繋げよう。\n仲間と同じ敵を叩くと「連携」で絆ゲージが一気にたまる。\n秘奥義ゲージは戦闘をまたいで300%までたまる。200%で2人、300%で3人の合体秘奥義になる。"
@@ -514,140 +514,14 @@ func mark_skit_seen(sid: String) -> void:
 		award_title(s["award"][0], s["award"][1])
 
 
-# ------------------------------------------------------------ 塔マップ生成
+# ------------------------------------------------------------ 探索マップ（層ごと）
+# map = {"floor": 層, "pos": [x, y], "dir": 向き, "done": {物のid: true}, "fog": 通った所, "engage": 戦闘中の相手}
 func gen_map() -> void:
-	if DB.floor_data(floor_num).get("final", false):
-		_gen_final_map()
-		return
-	var nodes = {}
-	var next_id = 0
-	var grid = {}  # "row,col" -> id
-	var lanes = 4
-
-	var make = func(row: int, col: int, type: String) -> int:
-		var key = "%d,%d" % [row, col]
-		if grid.has(key):
-			return grid[key]
-		var id: int = nodes.size()
-		nodes[id] = {"id": id, "row": row, "col": col, "type": type, "next": [], "done": false,
-			"jx": rng.randf_range(-14, 14), "jy": rng.randf_range(-8, 8)}
-		grid[key] = id
-		return id
-
-	var link = func(a: int, b: int) -> void:
-		if not b in nodes[a]["next"]:
-			nodes[a]["next"].append(b)
-
-	# 中間の強制ストーリーマス（全ルートが合流）
-	var story_id: int = make.call(4, 1.5 as int, "story")
-	nodes[story_id]["col"] = 1.5
-	var camp_ids: Array = []
-	# 前半 row0-3 / 後半 row5-6 を独立に経路生成
-	for half in [[0, 3], [5, 6]]:
-		var starts: Array = []
-		for p in range(4):
-			var col = rng.randi_range(0, lanes - 1)
-			if p < 2:
-				col = [0, lanes - 1][p]
-			var prev = -1
-			for row in range(half[0], half[1] + 1):
-				var id: int = make.call(row, col, "")
-				if prev >= 0:
-					link.call(prev, id)
-				elif half[0] == 5:
-					link.call(story_id, id)
-				prev = id
-				col = clampi(col + rng.randi_range(-1, 1), 0, lanes - 1)
-			if half[0] == 0:
-				link.call(prev, story_id)
-			else:
-				# 後半の終点 → ボス前の焚火
-				var camp_col = clampi(col, 0, lanes - 1)
-				var cid: int = make.call(7, camp_col, "camp")
-				link.call(prev, cid)
-				if not cid in camp_ids:
-					camp_ids.append(cid)
-	var boss_id: int = make.call(MAX_ROW, 1, "boss")
-	nodes[boss_id]["col"] = 1.5
-	for cid in camp_ids:
-		link.call(cid, boss_id)
-
-	# 種類を割り当て
-	for id in nodes:
-		var n: Dictionary = nodes[id]
-		if n["type"] != "":
-			continue
-		var row: int = n["row"]
-		if row == 0:
-			n["type"] = "battle"
-			continue
-		var roll = rng.randf()
-		var t = "battle"
-		if roll < 0.42:
-			t = "battle"
-		elif roll < 0.62:
-			t = "event"
-		elif roll < 0.74:
-			t = "shop"
-		elif roll < 0.88:
-			t = "elite" if row >= 2 else "battle"
-		else:
-			t = "camp" if row >= 2 else "event"
-		n["type"] = t
-	# 各半分に最低1つのショップを保証
-	_ensure_type(nodes, [1, 2, 3], "shop")
-	_ensure_type(nodes, [5, 6], "elite")
-
-	map = {"nodes": nodes, "current": -1}
+	init_field()
 
 
-func _gen_final_map() -> void:
-	# 頂上：一本道（ストーリー → 戦闘 → 焚火 → ボス）
-	var types = ["story", "battle", "elite", "camp", "boss"]
-	var rows = [0, 2, 4, 7, 8]
-	var nodes = {}
-	for i in range(types.size()):
-		nodes[i] = {"id": i, "row": rows[i], "col": 1.5, "type": types[i], "next": [i + 1] if i < types.size() - 1 else [],
-			"done": false, "jx": 0.0, "jy": 0.0}
-	map = {"nodes": nodes, "current": -1}
-
-
-func _ensure_type(nodes: Dictionary, rows: Array, t: String) -> void:
-	var cands: Array = []
-	for id in nodes:
-		if nodes[id]["row"] in rows:
-			if nodes[id]["type"] == t:
-				return
-			if nodes[id]["type"] == "battle":
-				cands.append(id)
-	if cands.size() > 0:
-		nodes[cands[rng.randi() % cands.size()]]["type"] = t
-
-
-func node(id: int) -> Dictionary:
-	return map["nodes"].get(id, {})
-
-
-func selectable_nodes() -> Array:
-	var cur: int = map["current"]
-	var res: Array = []
-	if cur < 0:
-		for id in map["nodes"]:
-			if map["nodes"][id]["row"] == 0:
-				res.append(id)
-	else:
-		res = map["nodes"][cur]["next"].duplicate()
-	return res
-
-
-func enter_node(id: int) -> void:
-	map["current"] = id
-
-
-func complete_node() -> void:
-	var cur: int = map["current"]
-	if cur >= 0:
-		map["nodes"][cur]["done"] = true
+func init_field() -> void:
+	map = {"floor": floor_num, "pos": [], "dir": 3, "done": {}, "fog": "", "engage": ""}
 
 
 func next_floor() -> void:
@@ -679,10 +553,7 @@ func to_dict() -> Dictionary:
 
 
 func _map_to_json() -> Dictionary:
-	var arr: Array = []
-	for id in map["nodes"]:
-		arr.append(map["nodes"][id])
-	return {"nodes": arr, "current": map["current"]}
+	return map
 
 
 func from_dict(d: Dictionary) -> void:
@@ -698,17 +569,13 @@ func from_dict(d: Dictionary) -> void:
 	for k in d["items"]:
 		items[k] = int(d["items"][k])
 	floor_num = int(d["floor"])
-	var nodes = {}
-	for n in d["map"]["nodes"]:
-		var id = int(n["id"])
-		n["id"] = id
-		n["row"] = int(n["row"])
-		var nx: Array = []
-		for x in n["next"]:
-			nx.append(int(x))
-		n["next"] = nx
-		nodes[id] = n
-	map = {"nodes": nodes, "current": int(d["map"]["current"])}
+	var md: Dictionary = d["map"]
+	if md.has("nodes") or not md.has("done"):
+		# 古いセーブ（分かれ道マップ）は、その層の最初の位置から
+		init_field()
+	else:
+		map = md
+		map["floor"] = int(map.get("floor", floor_num))
 	floor_buffs = d["floor_buffs"]
 	meal = d["meal"]
 	if meal.has("left"):
@@ -842,16 +709,14 @@ func _debug_auto_learn(cid: String) -> void:
 
 
 func _debug_move_before_boss() -> void:
-	# ボスの1つ手前（焚火）にいる状態にし、そこまでの道を踏破済みにする
-	var boss_id := -1
-	for id in map["nodes"]:
-		if map["nodes"][id]["type"] == "boss":
-			boss_id = id
-	var prev := -1
-	for id in map["nodes"]:
-		if boss_id in map["nodes"][id]["next"]:
-			prev = id
-			break
-	if prev >= 0:
-		map["nodes"][prev]["done"] = true
-		map["current"] = prev
+	# ボス手前の焚火の前に立たせる
+	var fm: Dictionary = DB.FieldMaps.MAPS.get(floor_num, {})
+	var rows: Array = fm.get("rows", [])
+	for y in range(rows.size()):
+		var x: int = rows[y].find("F")
+		if x >= 0:
+			for d in [Vector2i(0, 1), Vector2i(-1, 0), Vector2i(1, 0), Vector2i(0, -1)]:
+				var c: String = rows[y + d.y][x + d.x]
+				if c in ".,:\"=^G":
+					map["pos"] = [(x + d.x) * 64.0 + 32.0, (y + d.y) * 64.0 + 52.0]
+					return

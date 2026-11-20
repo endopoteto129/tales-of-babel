@@ -48,6 +48,13 @@ func _draw() -> void:
 	var k = t / life
 	var a = 1.0 - k
 	var c = Color(color.r, color.g, color.b, a)
+	# ドット絵のエフェクト（正方形のコマを横に並べた画像。白〜灰色で描き、ここで属性の色を乗せる）
+	var pix: Texture2D = PixelArt.tex("fx/%s.png" % kind)
+	if pix:
+		texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		var n: int = PixelArt.strip_frames(pix)
+		PixelArt.draw_strip(self, pix, min(n - 1, int(k * n)), Vector2.ZERO, Color(color.r, color.g, color.b, 1.0), PixelArt.SCALE * scale_k)
+		return
 	match kind:
 		"spark", "crit":
 			var n = 8 if kind == "spark" else 12

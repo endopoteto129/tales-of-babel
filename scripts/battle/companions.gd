@@ -55,6 +55,13 @@ func _draw_nine() -> void:
 	if cheer_t > 0.0:
 		jump = abs(sin(cheer_t * 12.0)) * 22.0
 	var p = base + Vector2(0, -jump)
+	var pix: Texture2D = PixelArt.tex("battle/nine.png")
+	if pix:
+		# 8列×2行（0 待機4コマ / 1 応援4コマ）
+		texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		var row := 1 if cheer_t > 0.0 else 0
+		PixelArt.draw_cell(self, pix, 8, 2, int(t * 6.0) % 4, row, p)
+		return
 	var skin = Color(1.0, 0.86, 0.74)
 	var hair = Color(0.95, 0.85, 0.6)
 	draw_circle(base + Vector2(0, 2), 16, Color(0, 0, 0, 0.25))
@@ -83,6 +90,12 @@ func _draw_nine() -> void:
 
 func _draw_pots() -> void:
 	var c = pots_p
+	var pix: Texture2D = PixelArt.tex("battle/pots.png")
+	if pix:
+		# 正方形のコマを横に並べた浮遊アニメ
+		texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		PixelArt.draw_strip(self, pix, int(t * 6.0), c)
+		return
 	draw_circle(c, 15, Color(0.35, 0.5, 0.6))
 	draw_circle(c, 13, Color(0.55, 0.75, 0.85))
 	draw_rect(Rect2(c + Vector2(-10, -4), Vector2(20, 8)), Color(0.1, 0.12, 0.16))

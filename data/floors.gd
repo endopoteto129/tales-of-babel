@@ -6,6 +6,8 @@ extends RefCounted
 const ENEMY_HP_MULT := 1.6
 const ENEMY_POWER_MULT := 1.45
 const BOSS_POWER_MULT := 0.65
+# 戦闘の経験値倍率。探索マップで「目についた敵の7割ほどと戦う」と、各層のボスで想定レベルになるように合わせてある
+const EXP_MULT := 1.2
 # 頂上でレンがひとりで戦うとき（仲間が捕らわれている間）の敵の倍率
 const SOLO_HP_MULT := 0.4
 const SOLO_POWER_MULT := 0.35

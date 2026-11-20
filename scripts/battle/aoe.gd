@@ -172,6 +172,15 @@ func _draw() -> void:
 	var c = Color(color.r, color.g, color.b, a)
 	if floor_mark and shape in ["lane", "column", "circle"]:
 		_draw_floor_marker(1.0, a)
+	# ドット絵（正方形のコマを横に並べた画像）があれば、範囲いっぱいに引き伸ばして描く
+	var pix: Texture2D = PixelArt.tex("fx/aoe_%s.png" % shape)
+	if pix and not shape in ["lane", "column", "circle"]:
+		texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		var n: int = PixelArt.strip_frames(pix)
+		var cs: float = pix.get_height()
+		var fi: int = min(n - 1, int(clamp(k, 0.0, 0.999) * n))
+		draw_texture_rect_region(pix, Rect2(-w / 2, -max(hgt, 40.0), w, max(hgt, 40.0)), Rect2(cs * fi, 0, cs, cs), Color(color.r, color.g, color.b, a))
+		return
 	match shape:
 		"lane":
 			# 床を走る衝撃（奥行きをずらせばかわせる）

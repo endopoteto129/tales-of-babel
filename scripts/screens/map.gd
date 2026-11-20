@@ -1,21 +1,58 @@
-# 塔の層マップ（スレイ・ザ・スパイア風のルート選択）と、進行の司令塔
+# 塔の各層の探索マップ（見下ろし型）。歩いて探索し、敵シンボルに触れると戦闘。
+# 宝箱・行商人・焚火・イベント・住人・中盤ストーリー・ボスを配置する。マップは data/fieldmaps.gd
 extends Control
 
-const ICON := {"battle": "戦", "elite": "強", "shop": "店", "event": "？", "camp": "焚", "story": "話", "boss": "王"}
-const TYPE_NAME := {"battle": "戦闘", "elite": "強敵", "shop": "ショップ", "event": "イベント", "camp": "焚火", "story": "ストーリー", "boss": "ボス"}
-const TYPE_COLOR := {"battle": Color(0.85, 0.85, 0.9), "elite": Color(1.0, 0.45, 0.35), "shop": Color(1.0, 0.85, 0.35), "event": Color(0.6, 0.85, 1.0),
-	"camp": Color(1.0, 0.6, 0.25), "story": Color(1.0, 0.7, 0.9), "boss": Color(1.0, 0.25, 0.3)}
+const TS := 64.0
+const SPEED := 270.0
+const DASH_MULT := 1.55
+const SOLID_TILES := "#To~ "
+const OBJ_SOLID := "CMNF?B"
+const VIEW := Vector2(1280, 720)
+# 敵シンボルの動き
+const WANDER_SPEED := 70.0
+const CHASE_SPEED := 190.0
+const SIGHT := 4.5 * 64.0
+const LEASH := 7.0 * 64.0
+const CONTACT := 46.0
 
 var params: Dictionary = {}
 var t := 0.0
-var sel_idx := 0
-var selectable: Array = []
-var hover_id := -1
-var side: VBoxContainer
-var info_label: RichTextLabel
-var skit_btn: Button
+var fm: Dictionary = {}
+var rows: Array = []
+var W := 0
+var H := 0
+var ftheme := "grass"
+var view: Node2D
+var hud: Control
+var ppos := Vector2.ZERO
+var pdir := 0  # 0 下 1 左 2 右 3 上
+var walk_t := 0.0
+var moving := false
+var objs: Array = []
+var cam := Vector2.ZERO
 var locked := true
-var node_pos: Dictionary = {}
+var invul := 0.0
+var near: Dictionary = {}
+var fog: PackedByteArray
+var skit_btn: Button
+var flash := 0.0
+var boss_obj: Dictionary = {}
+var bot_input := Vector2.ZERO  # 自動テストプレイ用の入力（0 なら人の入力）
+var bot_mode := false
+var hint_cd := 0.0
+var bot_log: Array = []
+
+
+class View extends Node2D:
+	var s
+	func _draw() -> void:
+		s._draw_world(self)
+
+
+class Hud extends Control:
+	var s
+	func _draw() -> void:
+		s._draw_hud(self)
 
 
 func setup(p: Dictionary) -> void:
@@ -24,8 +61,17 @@ func setup(p: Dictionary) -> void:
 
 func _ready() -> void:
 	UI.full(self)
-	_compute_positions()
-	_build_side()
+	_load_floor()
+	view = View.new()
+	view.s = self
+	view.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	add_child(view)
+	hud = Hud.new()
+	hud.s = self
+	UI.full(hud)
+	hud.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(hud)
+	_update_cam(true)
 	Game.skit_available.connect(_on_skit_available)
 	_arrive()
 
@@ -35,39 +81,469 @@ func _exit_tree() -> void:
 		Game.skit_available.disconnect(_on_skit_available)
 
 
-func _compute_positions() -> void:
-	node_pos.clear()
-	for id in Game.map["nodes"]:
-		var n: Dictionary = Game.map["nodes"][id]
-		var col: float = float(n["col"])
-		var x = 150.0 + col * 200.0 + float(n.get("jx", 0.0))
-		var y = 650.0 - n["row"] * 70.0 + float(n.get("jy", 0.0))
-		node_pos[int(id)] = Vector2(x, y)
+# ------------------------------------------------------------ マップの読み込み
+func _load_floor() -> void:
+	if int(Game.map.get("floor", -1)) != Game.floor_num or not Game.map.has("done"):
+		Game.init_field()
+	fm = DB.FieldMaps.MAPS.get(Game.floor_num, DB.FieldMaps.MAPS[1])
+	ftheme = fm["theme"]
+	rows = fm["rows"]
+	H = rows.size()
+	W = rows[0].length()
+	objs.clear()
+	var done: Dictionary = Game.map["done"]
+	for y in range(H):
+		var r: String = rows[y]
+		for x in range(W):
+			var c := r[x]
+			if c == "P" and (Game.map.get("pos", []) as Array).is_empty():
+				ppos = _tile_center(x, y) + Vector2(0, 20)
+			if c in "ELCMNF?B":
+				var id := "%d,%d" % [x, y]
+				var props: Dictionary = fm["objects"].get(id, {})
+				var o := {"id": id, "ch": c, "tile": Vector2i(x, y), "pos": _tile_center(x, y) + Vector2(0, 20), "props": props,
+					"done": done.has(id), "home": _tile_center(x, y) + Vector2(0, 20), "state": "idle", "wait": randf_range(0.5, 2.0),
+					"target": Vector2.ZERO, "face": 1.0, "alert": 0.0, "stun": 0.0, "walk": randf() * 3.0}
+				if c in "EL" and done.has(id):
+					continue
+				objs.append(o)
+				if c == "B":
+					boss_obj = o
+	var pos: Array = Game.map.get("pos", [])
+	if pos.size() == 2:
+		ppos = Vector2(float(pos[0]), float(pos[1]))
+	pdir = int(Game.map.get("dir", 3))
+	var f: String = Game.map.get("fog", "")
+	fog = PackedByteArray()
+	fog.resize(W * H)
+	if f.length() == W * H:
+		for i in range(W * H):
+			fog[i] = 1 if f[i] == "1" else 0
+	_reveal()
+
+
+func _tile_center(x: int, y: int) -> Vector2:
+	return Vector2(x * TS + TS / 2.0, y * TS + TS / 2.0)
+
+
+func tile_at(p: Vector2) -> Vector2i:
+	return Vector2i(int(floor(p.x / TS)), int(floor(p.y / TS)))
+
+
+func ch(x: int, y: int) -> String:
+	if x < 0 or y < 0 or x >= W or y >= H:
+		return "#"
+	return rows[y][x]
+
+
+func gate_open() -> bool:
+	var fs: Dictionary = DB.Story.FLOORS.get(Game.floor_num, {})
+	return not fs.has("mid") or Game.flags.get("story_" + fs["mid"], false)
+
+
+func solid(x: int, y: int, for_enemy: bool = false) -> bool:
+	var c := ch(x, y)
+	if c in SOLID_TILES:
+		return true
+	if c == "+":
+		return for_enemy or not gate_open()
+	if for_enemy and c in "G=":
+		return c == "G"
+	if c in OBJ_SOLID:
+		# 置物は、使い終わっても置いたまま（焚火・宝箱）。イベントは使うと消える
+		var o = _obj_at(x, y)
+		if o.is_empty():
+			return false
+		if c == "?" and o["done"]:
+			return false
+		return true
+	return false
+
+
+func _obj_at(x: int, y: int) -> Dictionary:
+	for o in objs:
+		if o["tile"] == Vector2i(x, y):
+			return o
+	return {}
+
+
+# 足元の四角（幅32×高さ20）が壁に重なるか
+func blocked(p: Vector2, for_enemy: bool = false) -> bool:
+	for off in [Vector2(-16, -10), Vector2(16, -10), Vector2(-16, 8), Vector2(16, 8)]:
+		var tp := tile_at(p + off)
+		if solid(tp.x, tp.y, for_enemy):
+			return true
+	return false
+
+
+func move_body(p: Vector2, v: Vector2, for_enemy: bool = false) -> Vector2:
+	var steps: int = int(ceil(v.length() / 8.0)) + 1
+	var d := v / steps
+	for i in range(steps):
+		var nx := p + Vector2(d.x, 0)
+		if not blocked(nx, for_enemy):
+			p = nx
+		var ny := p + Vector2(0, d.y)
+		if not blocked(ny, for_enemy):
+			p = ny
+	return p
+
+
+# ------------------------------------------------------------ 毎フレーム
+func _process(delta: float) -> void:
+	t += delta
+	flash = max(0.0, flash - delta * 2.0)
+	if invul > 0.0:
+		invul -= delta
+	hint_cd -= delta
+	var can_move: bool = not locked and not Main.inst.busy and is_inside_tree()
+	if can_move:
+		_move_player(delta)
+	else:
+		moving = false
+	_update_enemies(delta, can_move)
+	if can_move:
+		_check_triggers()
+	_update_near()
+	_update_cam(false)
+	view.position = -cam
+	view.queue_redraw()
+	hud.queue_redraw()
+
+
+func _move_player(delta: float) -> void:
+	var v := bot_input if bot_mode else Input.get_vector("move_left", "move_right", "move_up", "move_down", 0.25)
+	moving = v.length() > 0.1
+	if not moving:
+		return
+	if abs(v.x) > abs(v.y) * 1.1:
+		pdir = 1 if v.x < 0 else 2
+	elif abs(v.y) > 0.0:
+		pdir = 3 if v.y < 0 else 0
+	var sp := SPEED * (DASH_MULT if Input.is_action_pressed("guard") or bot_mode else 1.0)
+	ppos = move_body(ppos, v.limit_length(1.0) * sp * delta)
+	walk_t += delta * (1.4 if sp > SPEED else 1.0)
+	_reveal()
+
+
+func _reveal() -> void:
+	if fog.size() != W * H:
+		return
+	var tp := tile_at(ppos)
+	for y in range(tp.y - 5, tp.y + 6):
+		for x in range(tp.x - 6, tp.x + 7):
+			if x >= 0 and y >= 0 and x < W and y < H:
+				fog[y * W + x] = 1
+
+
+func _update_cam(snap: bool) -> void:
+	var want := ppos - VIEW / 2.0 + Vector2(0, -20)
+	var mw := W * TS
+	var mh := H * TS
+	want.x = clamp(want.x, 0.0, max(0.0, mw - VIEW.x)) if mw > VIEW.x else (mw - VIEW.x) / 2.0
+	want.y = clamp(want.y, 0.0, max(0.0, mh - VIEW.y)) if mh > VIEW.y else (mh - VIEW.y) / 2.0
+	cam = want if snap else cam.lerp(want, 0.18)
+	cam = cam.round()
+
+
+# ------------------------------------------------------------ 敵シンボル
+func _update_enemies(delta: float, active: bool) -> void:
+	for o in objs:
+		if not o["ch"] in "EL" or o["done"]:
+			continue
+		o["walk"] += delta
+		if o["stun"] > 0.0:
+			o["stun"] -= delta
+			o["alert"] = 0.0
+			continue
+		if not active:
+			continue
+		var guard: bool = o["ch"] == "L" or o["props"].get("move", "wander") == "guard"
+		var to_p: Vector2 = ppos - o["pos"]
+		var dist := to_p.length()
+		var sight: float = SIGHT * (0.45 if guard else 1.0)
+		var leash: float = LEASH * (0.35 if guard else 1.0)
+		var sees: bool = dist < sight and invul <= 0.0 and _line_clear(o["pos"], ppos)
+		var home_d: float = (o["pos"] - o["home"]).length()
+		if sees and home_d < leash:
+			if o["state"] != "chase":
+				o["alert"] = 1.0
+			o["state"] = "chase"
+		elif o["state"] == "chase":
+			o["state"] = "return"
+		o["alert"] = max(0.0, o["alert"] - delta * 0.6)
+		var v := Vector2.ZERO
+		match o["state"]:
+			"chase":
+				# 番の敵は、すぐそばを通ろうとすると飛びかかってくる
+				var lunge: bool = guard and dist < TS * 1.8
+				v = to_p.normalized() * (310.0 if lunge else CHASE_SPEED * (0.75 if guard else 1.0))
+			"return":
+				var back: Vector2 = o["home"] - o["pos"]
+				if back.length() < 8.0:
+					o["state"] = "idle"
+				else:
+					v = back.normalized() * WANDER_SPEED * 1.5
+			"walk":
+				var dv: Vector2 = o["target"] - o["pos"]
+				o["wait"] -= delta
+				if dv.length() < 6.0 or o["wait"] <= 0.0:
+					o["state"] = "idle"
+					o["wait"] = randf_range(0.8, 2.4)
+				else:
+					v = dv.normalized() * WANDER_SPEED
+			_:
+				o["wait"] -= delta
+				if o["wait"] <= 0.0 and not guard:
+					var ang := randf() * TAU
+					o["target"] = o["home"] + Vector2(cos(ang), sin(ang)) * randf_range(0.5, 2.6) * TS
+					o["state"] = "walk"
+					o["wait"] = 3.0
+		if v != Vector2.ZERO:
+			o["face"] = sign(v.x) if abs(v.x) > 1.0 else o["face"]
+			o["pos"] = move_body(o["pos"], v * delta, true)
+		elif guard:
+			o["face"] = sign(to_p.x) if abs(to_p.x) > 4.0 else o["face"]
+		# 接触
+		if dist < CONTACT * (1.3 if guard else 1.0) and invul <= 0.0 and active:
+			_encounter(o)
+			return
+
+
+func _line_clear(a: Vector2, b: Vector2) -> bool:
+	var n: int = int(a.distance_to(b) / 24.0) + 1
+	for i in range(1, n):
+		var p := a.lerp(b, float(i) / n) + Vector2(0, -8)
+		var tp := tile_at(p)
+		var c := ch(tp.x, tp.y)
+		if c in "#T ":
+			return false
+	return true
+
+
+func _encounter(o: Dictionary) -> void:
+	if locked:
+		return
+	if bot_mode:
+		bot_log.append(["battle", o["id"], o["ch"]])
+		o["done"] = true
+		Game.map["done"][o["id"]] = true
+		objs.erase(o)
+		invul = 1.0
+		return
+	locked = true
+	moving = false
+	Game.map["engage"] = o["id"]
+	_save_pos()
+	Sfx.play("warn", 1.2, -4)
+	flash = 1.0
+	var kind := "elite" if o["ch"] == "L" else "battle"
+	var g: Array = o["props"].get("g", DB.floor_data(Game.floor_num)["groups"][0])
+	await get_tree().create_timer(0.35).timeout
+	Main.inst.goto("battle", {"enemies": g, "kind": kind})
+
+
+# ------------------------------------------------------------ 触れる・調べる
+func _check_triggers() -> void:
+	var tp := tile_at(ppos)
+	if ch(tp.x, tp.y) == "G" and not gate_open():
+		_mid_story()
+		return
+	# 閉じた門に触れたとき
+	if not gate_open() and hint_cd <= 0.0:
+		for d in [Vector2i(0, -1), Vector2i(0, 1), Vector2i(-1, 0), Vector2i(1, 0)]:
+			var gp: Vector2i = tp + d
+			if ch(gp.x, gp.y) == "+" and ppos.distance_to(_tile_center(gp.x, gp.y)) < 62.0:
+				if fm.has("gate_hint"):
+					Main.inst.toast(fm["gate_hint"], "info")
+					hint_cd = 4.0
+				else:
+					_mid_story()
+				return
+	if not boss_obj.is_empty() and ppos.distance_to(boss_obj["pos"]) < TS * 1.7:
+		_start_boss()
+
+
+func _update_near() -> void:
+	near = {}
+	if locked:
+		return
+	var best := 9999.0
+	var face_v: Vector2 = [Vector2(0, 1), Vector2(-1, 0), Vector2(1, 0), Vector2(0, -1)][pdir]
+	for o in objs:
+		if not o["ch"] in "CMNF?":
+			continue
+		if o["done"] and o["ch"] in "C?":
+			continue
+		var d: Vector2 = o["pos"] - ppos
+		var dist := d.length()
+		if dist > TS * 1.25:
+			continue
+		if dist > TS * 0.8 and d.normalized().dot(face_v) < 0.3:
+			continue
+		if dist < best:
+			best = dist
+			near = o
+
+
+func interact() -> void:
+	if near.is_empty() or locked:
+		return
+	var o := near
+	if bot_mode and o["ch"] in "MF?N":
+		o["done"] = true
+		Game.map["done"][o["id"]] = true
+		bot_log.append(["visit", o["id"], o["ch"]])
+		return
+	match o["ch"]:
+		"C":
+			_open_chest(o)
+		"M":
+			locked = true
+			_save_pos()
+			Sfx.play("confirm")
+			Main.inst.goto("shop", {})
+		"F":
+			if o["done"]:
+				Main.inst.toast("焚火のあとが残っている。（焚火は1つの層で1回だけ）", "info")
+				return
+			locked = true
+			o["done"] = true
+			Game.map["done"][o["id"]] = true
+			_save_pos()
+			Sfx.play("confirm")
+			Main.inst.goto("camp", {})
+		"?":
+			locked = true
+			o["done"] = true
+			Game.map["done"][o["id"]] = true
+			Game.map["engage"] = ""
+			_save_pos()
+			Sfx.play("confirm")
+			Main.inst.goto("event", {})
+		"N":
+			_talk(o)
+
+
+func _open_chest(o: Dictionary) -> void:
+	o["done"] = true
+	Game.map["done"][o["id"]] = true
+	var p: Dictionary = o["props"]
+	var text := ""
+	if p.has("gald"):
+		Game.add_gald(int(p["gald"]))
+		text = "%d ガルドを手に入れた！" % int(p["gald"])
+	elif p.has("item"):
+		var n: int = int(p.get("n", 1))
+		Game.add_item(p["item"], n)
+		text = "%s ×%d を手に入れた！" % [DB.item(p["item"])["name"], n]
+	elif p.has("recipe"):
+		if not p["recipe"] in Game.known_recipes:
+			Game.known_recipes.append(p["recipe"])
+		text = "レシピ「%s」を覚えた！" % DB.Items.RECIPES[p["recipe"]]["name"]
+	else:
+		Game.add_item("apple_gel", 1)
+		text = "アップルグミ ×1 を手に入れた！"
+	Sfx.play("heal", 1.1, -2)
+	Main.inst.toast("宝箱：" + text, "info")
+	Game.count("chests")
+	Game.save_game()
+
+
+func _talk(o: Dictionary) -> void:
+	var lines: Array = o["props"].get("lines", [])
+	if lines.is_empty():
+		return
+	locked = true
+	Sfx.play("select")
+	Main.inst.play_dialogue({"lines": lines, "mode": "talk", "bg": "none"}, func() -> void:
+		locked = false)
+
+
+func _mid_story() -> void:
+	var fs: Dictionary = DB.Story.FLOORS.get(Game.floor_num, {})
+	if bot_mode:
+		Game._debug_apply_story(fs.get("mid", ""))
+		bot_log.append(["mid", "", "G"])
+		return
+	locked = true
+	moving = false
+	if fs.has("mid"):
+		await _story(fs["mid"])
+	Game.check_skits("story_mid")
+	for m in Game.party:
+		m["hp"] = max(m["hp"], int(Game.max_hp(m["id"]) * 0.5))
+	_save_pos()
+	Game.save_game()
+	if fm.get("gate", false):
+		Main.inst.toast("道が開いた！", "info")
+	locked = false
+
+
+func _start_boss() -> void:
+	if locked:
+		return
+	if bot_mode:
+		if bot_log.is_empty() or bot_log[-1][0] != "boss":
+			bot_log.append(["boss", boss_obj["id"], "B"])
+		return
+	locked = true
+	moving = false
+	_save_pos()
+	var fs2: Dictionary = DB.Story.FLOORS.get(Game.floor_num, {})
+	if fs2.has("boss_pre"):
+		await _story(fs2["boss_pre"])
+	Game.map["engage"] = boss_obj["id"]
+	Main.inst.goto("battle", {"enemies": DB.floor_data(Game.floor_num)["boss"], "kind": "boss"})
+
+
+func _save_pos() -> void:
+	Game.map["pos"] = [ppos.x, ppos.y]
+	Game.map["dir"] = pdir
+	var s := ""
+	for i in range(fog.size()):
+		s += "1" if fog[i] == 1 else "0"
+	Game.map["fog"] = s
 
 
 # ------------------------------------------------------------ 到着時の処理（進行の分岐）
 func _arrive() -> void:
 	locked = true
 	var after: String = params.get("after_battle", "")
+	var won: bool = params.get("won", false)
 	if after != "":
-		if params.get("won", false) or params.get("escaped", false):
-			Game.complete_node()
 		if after == "prologue":
 			await _prologue_after_battle()
 			return
-		if after == "boss" and params.get("won", false):
+		if after == "boss" and won:
 			await _after_boss()
 			return
-		if after == "elite" and params.get("won", false):
+		var eng: String = Game.map.get("engage", "")
+		if eng != "":
+			for o in objs:
+				if o["id"] == eng:
+					if won:
+						o["done"] = true
+						Game.map["done"][eng] = true
+					else:
+						o["stun"] = 3.0
+						# 逃げたら少し離れた場所に戻る
+						o["pos"] = o["home"]
+			if won:
+				objs = objs.filter(func(o) -> bool: return not (o["ch"] in "EL" and o["done"]))
+		Game.map["engage"] = ""
+		invul = 2.0
+		if after == "elite" and won:
 			await _buff_choice("強敵を倒した！ 加護をひとつ選ぼう", 3)
 			Game.check_skits("after_elite")
-		elif params.get("won", false):
+		elif won:
 			Game.check_skits("after_battle")
 	elif params.get("after", "") != "":
-		Game.complete_node()
+		invul = 1.0
 		Game.check_skits("after_" + params["after"])
-	elif params.get("new_floor", false) or Game.map["current"] < 0 and not Game.flags.get("floor_started_%d" % Game.floor_num, false):
+	elif params.get("new_floor", false) or not Game.flags.get("floor_started_%d" % Game.floor_num, false):
 		await _floor_start()
+	_save_pos()
 	Game.save_game()
 	_refresh()
 	await _map_tutorials()
@@ -225,65 +701,217 @@ func _buff_choice(title: String, n: int) -> void:
 
 
 # ------------------------------------------------------------ 画面
-func _build_side() -> void:
-	var p = UI.panel(Color(0.04, 0.05, 0.1, 0.88))
-	p.position = Vector2(900, 16)
-	p.custom_minimum_size = Vector2(366, 688)
-	add_child(p)
-	side = VBoxContainer.new()
-	side.add_theme_constant_override("separation", 6)
-	p.add_child(side)
-
-
 func _refresh() -> void:
-	for c in side.get_children():
-		c.queue_free()
-	var fd: Dictionary = DB.floor_data(Game.floor_num)
-	side.add_child(UI.label(fd["name"], 22, fd["accent"], true))
-	side.add_child(UI.label(fd["sub"], 15, UI.C_DIM))
-	side.add_child(HSeparator.new())
-	for m in Game.present_party():
-		var hb = HBoxContainer.new()
-		var nm = UI.label("%s Lv%d" % [DB.cname(m["id"]), m["level"]], 17, DB.ccolor(m["id"]).lightened(0.3), true)
-		nm.custom_minimum_size = Vector2(130, 0)
-		hb.add_child(nm)
-		var active: bool = m in Game.active_party()
-		hb.add_child(UI.label("HP %d/%d" % [m["hp"], Game.max_hp(m["id"])], 16, UI.C_TEXT if active else UI.C_DIM))
-		if m["sp"] > 0:
-			hb.add_child(UI.label(" SP%d" % m["sp"], 14, UI.C_GOLD))
-		side.add_child(hb)
-	side.add_child(UI.label("所持金  %d ガルド" % Game.gald, 17, UI.C_GOLD))
-	side.add_child(HSeparator.new())
-	side.add_child(UI.label("層の加護", 17, UI.C_BLUE, true))
-	if Game.floor_buffs.is_empty():
-		side.add_child(UI.label("なし", 15, UI.C_DIM))
-	for b in Game.floor_buffs:
-		var l = UI.label("・" + DB.buff(b)["name"], 15, UI.C_TEXT)
-		l.tooltip_text = DB.buff(b)["desc"]
-		l.mouse_filter = Control.MOUSE_FILTER_PASS
-		side.add_child(l)
-	if not Game.meal.is_empty():
-		side.add_child(UI.label("料理：%s（あと%d戦）" % [DB.Items.RECIPES[Game.meal["id"]]["name"], Game.meal["left"]], 15, Color(1, 0.75, 0.5)))
-	side.add_child(HSeparator.new())
-	info_label = UI.rich("", 16)
-	info_label.custom_minimum_size = Vector2(340, 70)
-	side.add_child(info_label)
-	var spacer = Control.new()
-	spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	side.add_child(spacer)
 	_update_skit_btn()
-	var menu_btn = UI.button("", _open_menu, 18)
-	UI.live_text(menu_btn, func() -> String: return "メニュー " + Game.btn("menu"))
-	side.add_child(menu_btn)
-	var help = UI.label("", 14, UI.C_DIM)
-	UI.live_text(help, func() -> String: return "%sで選択／%sで進む" % [Game.key("move"), Game.key("accept")])
-	side.add_child(help)
-	selectable = Game.selectable_nodes()
-	selectable.sort_custom(func(a, b) -> bool: return node_pos[a].x < node_pos[b].x)
-	sel_idx = clamp(sel_idx, 0, max(0, selectable.size() - 1))
-	_update_info()
 
 
+func _on_skit_available(_sid: String) -> void:
+	Main.inst.toast("スキットが発生しました！ " + Game.btn("skit"), "skit")
+	_update_skit_btn()
+
+
+func _play_next_skit() -> void:
+	if Game.pending_skits.is_empty() or locked:
+		return
+	var sid: String = Game.pending_skits[0]
+	var data: Dictionary = DB.Skits.DATA[sid].duplicate()
+	data["mode"] = "skit"
+	locked = true
+	Main.inst.play_dialogue(data, func() -> void:
+		Game.mark_skit_seen(sid)
+		_refresh()
+		locked = false)
+
+
+func _open_menu() -> void:
+	if locked:
+		return
+	locked = true
+	_save_pos()
+	Main.inst.goto("menu", {"back": "map"})
+
+
+func _unhandled_input(event: InputEvent) -> void:
+	if locked or Main.inst.busy:
+		return
+	if event.is_action_pressed("skit"):
+		_play_next_skit()
+	elif event.is_action_pressed("menu") or event.is_action_pressed("pause"):
+		_open_menu()
+	elif event.is_action_pressed("ui_accept") or event.is_action_pressed("attack"):
+		interact()
+
+
+# ------------------------------------------------------------ 描画（マップ）
+func _draw_world(ci: CanvasItem) -> void:
+	var x0: int = max(0, int(cam.x / TS) - 1)
+	var y0: int = max(0, int(cam.y / TS) - 1)
+	var x1: int = min(W - 1, int((cam.x + VIEW.x) / TS) + 1)
+	var y1: int = min(H - 1, int((cam.y + VIEW.y) / TS) + 2)
+	for y in range(y0, y1 + 1):
+		for x in range(x0, x1 + 1):
+			var c := ch(x, y)
+			FieldArt.draw_ground(ci, ftheme, c, x, y, ch(x, y + 1), ch(x, y - 1), t)
+	# 中盤ストーリーの地点
+	if not gate_open():
+		for y in range(y0, y1 + 1):
+			for x in range(x0, x1 + 1):
+				if ch(x, y) == "G":
+					var cc := _tile_center(x, y)
+					ci.draw_circle(cc, 20.0 + sin(t * 4.0) * 4.0, Color(1.0, 0.75, 0.9, 0.22))
+					ci.draw_arc(cc, 26.0 + sin(t * 4.0) * 4.0, 0, TAU, 24, Color(1.0, 0.8, 0.95, 0.5), 2.0)
+	# 奥から手前の順に、背の高いもの・置物・キャラを描く
+	var items: Array = []
+	for y in range(y0, min(H - 1, y1 + 2) + 1):
+		for x in range(x0, x1 + 1):
+			var c2 := ch(x, y)
+			if c2 == "T" or c2 == "o" or (c2 == "+" and not gate_open()):
+				items.append([y * TS + TS - 6, 0, Vector2i(x, y), c2])
+	for o in objs:
+		var p: Vector2 = o["pos"]
+		if p.x < cam.x - 200 or p.x > cam.x + VIEW.x + 200 or p.y < cam.y - 100 or p.y > cam.y + VIEW.y + 260:
+			continue
+		if o["ch"] == "?" and o["done"]:
+			continue
+		items.append([p.y, 1, o])
+	items.append([ppos.y, 2])
+	items.sort_custom(func(a, b) -> bool: return a[0] < b[0])
+	for it in items:
+		match it[1]:
+			0:
+				FieldArt.draw_tall(ci, ftheme, it[3], it[2].x, it[2].y, t)
+			1:
+				_draw_obj(ci, it[2])
+			2:
+				var blink: bool = invul > 0.0 and fmod(t, 0.2) < 0.1
+				FieldArt.draw_walker(ci, "chara_" + Game.leader_id(), Game.leader_id(), ppos, pdir, walk_t, moving, Color(1, 1, 1, 0.45) if blink else Color.WHITE)
+	# 調べられる物の吹き出し
+	if not near.is_empty():
+		var label := _near_label(near)
+		var bp: Vector2 = near["pos"] + Vector2(0, -96 - sin(t * 5.0) * 3.0)
+		var txt := "%s %s" % [Game.btn("accept"), label]
+		var w := UI.FONT_BOLD.get_string_size(txt, HORIZONTAL_ALIGNMENT_LEFT, -1, 20).x + 24
+		ci.draw_rect(Rect2(bp - Vector2(w / 2.0, 18), Vector2(w, 32)), Color(0.05, 0.06, 0.12, 0.9))
+		ci.draw_rect(Rect2(bp - Vector2(w / 2.0, 18), Vector2(w, 32)), UI.C_GOLD, false, 2.0)
+		ci.draw_string(UI.FONT_BOLD, bp + Vector2(-w / 2.0 + 12, 6), txt, HORIZONTAL_ALIGNMENT_LEFT, -1, 20, Color.WHITE)
+
+
+func _near_label(o: Dictionary) -> String:
+	match o["ch"]:
+		"C":
+			return "開ける"
+		"M":
+			return "買い物"
+		"F":
+			return "休む" if not o["done"] else "調べる"
+		"N":
+			return "話す"
+		"?":
+			return "調べる"
+	return "調べる"
+
+
+func _draw_obj(ci: CanvasItem, o: Dictionary) -> void:
+	var p: Vector2 = o["pos"]
+	match o["ch"]:
+		"E", "L":
+			var g: Array = o["props"].get("g", ["slime"])
+			var mod := Color(1, 1, 1, 0.5) if o["stun"] > 0.0 and fmod(t, 0.25) < 0.12 else Color.WHITE
+			FieldArt.draw_symbol(ci, g[0], p, o["walk"], o["face"], o["ch"] == "L", o["alert"], mod)
+			if g.size() > 1 and o["ch"] == "E":
+				# 群れの数（小さな点）
+				for i in range(g.size()):
+					ci.draw_circle(p + Vector2(-8 * (g.size() - 1) + i * 16, 14), 4.0, Color(1.0, 0.85, 0.3, 0.85))
+		"C":
+			FieldArt.draw_chest(ci, p, o["done"], t)
+		"F":
+			FieldArt.draw_campfire(ci, p, o["done"], t)
+		"?":
+			FieldArt.draw_event_spot(ci, p, t)
+		"M":
+			FieldArt.draw_walker(ci, "npc_merchant", "towner", p, 0, t, false)
+			ci.draw_rect(Rect2(p + Vector2(-34, -8), Vector2(68, 14)), Color(0.5, 0.3, 0.15))
+			ci.draw_string(UI.FONT_BOLD, p + Vector2(-14, -96), "店", HORIZONTAL_ALIGNMENT_LEFT, -1, 24, UI.C_GOLD)
+		"N":
+			var cid: String = o["props"].get("cid", "towner")
+			FieldArt.draw_walker(ci, "npc_" + o["props"].get("sprite", cid), cid, p, 0, t, false)
+		"B":
+			FieldArt.draw_boss(ci, DB.floor_data(Game.floor_num)["boss"][0], p, t)
+
+
+# ------------------------------------------------------------ 描画（情報表示）
+func _draw_hud(ci: Control) -> void:
+	var fd: Dictionary = DB.floor_data(Game.floor_num)
+	# 層の名前
+	ci.draw_rect(Rect2(12, 12, 360, 64), Color(0.03, 0.04, 0.09, 0.78))
+	ci.draw_string(UI.FONT_BOLD, Vector2(26, 42), fd["name"], HORIZONTAL_ALIGNMENT_LEFT, -1, 22, fd["accent"])
+	var info := "%d ガルド" % Game.gald
+	if not Game.floor_buffs.is_empty():
+		info += "　加護 %d" % Game.floor_buffs.size()
+	if not Game.meal.is_empty():
+		info += "　料理 あと%d戦" % Game.meal["left"]
+	ci.draw_string(UI.FONT, Vector2(26, 66), info, HORIZONTAL_ALIGNMENT_LEFT, -1, 16, UI.C_GOLD)
+	# パーティ
+	var mem: Array = Game.present_party()
+	var y := 720.0 - 14 - mem.size() * 26
+	ci.draw_rect(Rect2(12, y - 8, 250, mem.size() * 26 + 12), Color(0.03, 0.04, 0.09, 0.72))
+	for i in range(mem.size()):
+		var m: Dictionary = mem[i]
+		var yy := y + i * 26
+		ci.draw_string(UI.FONT_BOLD, Vector2(22, yy + 15), "%s" % DB.cname(m["id"]), HORIZONTAL_ALIGNMENT_LEFT, -1, 15, DB.ccolor(m["id"]).lightened(0.35))
+		ci.draw_string(UI.FONT, Vector2(88, yy + 15), "Lv%d" % m["level"], HORIZONTAL_ALIGNMENT_LEFT, -1, 13, UI.C_DIM)
+		var r: float = float(m["hp"]) / max(1, Game.max_hp(m["id"]))
+		ci.draw_rect(Rect2(130, yy + 6, 120, 9), Color(0, 0, 0, 0.6))
+		ci.draw_rect(Rect2(130, yy + 6, 120 * r, 9), UI.C_GREEN if r > 0.5 else (UI.C_GOLD if r > 0.25 else UI.C_RED))
+	# 小さな地図（通った所だけ見える）
+	var mk := 4.0
+	var mw := W * mk
+	var mh := H * mk
+	var mo := Vector2(1280 - mw - 16, 14)
+	ci.draw_rect(Rect2(mo - Vector2(6, 6), Vector2(mw + 12, mh + 12)), Color(0.03, 0.04, 0.09, 0.72))
+	var P: Dictionary = FieldArt.THEMES[ftheme]
+	for yy2 in range(H):
+		for xx in range(W):
+			if fog[yy2 * W + xx] == 0:
+				continue
+			var c := ch(xx, yy2)
+			var col: Color
+			if c in "#T ":
+				continue
+			elif c == "~":
+				col = P["water"]
+			elif c == "+" and not gate_open():
+				col = Color(0.8, 0.5, 0.3)
+			else:
+				col = Color(0.85, 0.85, 0.8, 0.85)
+			ci.draw_rect(Rect2(mo + Vector2(xx, yy2) * mk, Vector2(mk, mk)), col)
+	for o in objs:
+		var tp: Vector2i = o["tile"]
+		if fog[tp.y * W + tp.x] == 0:
+			continue
+		var oc := Color.TRANSPARENT
+		match o["ch"]:
+			"C":
+				oc = Color(1.0, 0.8, 0.3) if not o["done"] else Color.TRANSPARENT
+			"M":
+				oc = Color(0.5, 0.9, 1.0)
+			"F":
+				oc = Color(1.0, 0.5, 0.2) if not o["done"] else Color.TRANSPARENT
+			"B":
+				oc = Color(1.0, 0.2, 0.2)
+			"?":
+				oc = Color(0.7, 0.8, 1.0) if not o["done"] else Color.TRANSPARENT
+			"N":
+				oc = Color(0.6, 1.0, 0.6)
+		if oc.a > 0.0:
+			ci.draw_rect(Rect2(mo + Vector2(tp.x, tp.y) * mk - Vector2(1, 1), Vector2(mk + 2, mk + 2)), oc)
+	var pp := mo + ppos / TS * mk
+	ci.draw_circle(pp, 3.5 + sin(t * 6.0), Color(1.0, 0.3, 0.3))
+	# 操作
+	var help := "%s 移動　%s 調べる　%s ダッシュ　%s メニュー" % [Game.key("dir") if not Game.pad_mode else Game.key("move"), Game.key("accept"), Game.key("guard"), Game.key("menu")]
+	ci.draw_string(UI.FONT, Vector2(1280 - 16 - UI.FONT.get_string_size(help, HORIZONTAL_ALIGNMENT_LEFT, -1, 15).x, 708), help, HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color(1, 1, 1, 0.75))
+	if flash > 0.0:
+		ci.draw_rect(Rect2(0, 0, 1280, 720), Color(1, 1, 1, flash * 0.8))
 # スキットが見られるときは、右パネルの空いた所に目立つ呼び出しを出す
 func _update_skit_btn() -> void:
 	if is_instance_valid(skit_btn):
@@ -300,7 +928,7 @@ func _update_skit_btn() -> void:
 	b.add_theme_stylebox_override("hover", hover)
 	b.add_theme_stylebox_override("pressed", hover)
 	b.add_theme_stylebox_override("focus", hover)
-	b.position = Vector2(908, 492)
+	b.position = Vector2(916, 576)
 	b.custom_minimum_size = Vector2(350, 112)
 	b.pressed.connect(func() -> void:
 		Sfx.play("confirm")
@@ -347,208 +975,3 @@ func _update_skit_btn() -> void:
 	var glow = b.create_tween().set_loops()
 	glow.tween_property(b, "modulate", Color(1.25, 1.15, 1.25), 0.6).set_trans(Tween.TRANS_SINE)
 	glow.tween_property(b, "modulate", Color.WHITE, 0.6).set_trans(Tween.TRANS_SINE)
-
-
-func _on_skit_available(_sid: String) -> void:
-	Main.inst.toast("スキットが発生しました！ " + Game.btn("skit"), "skit")
-	_update_skit_btn()
-
-
-func _play_next_skit() -> void:
-	if Game.pending_skits.is_empty() or locked:
-		return
-	var sid: String = Game.pending_skits[0]
-	var data: Dictionary = DB.Skits.DATA[sid].duplicate()
-	data["mode"] = "skit"
-	locked = true
-	Main.inst.play_dialogue(data, func() -> void:
-		Game.mark_skit_seen(sid)
-		_refresh()
-		locked = false)
-
-
-func _open_menu() -> void:
-	if locked:
-		return
-	Main.inst.goto("menu", {"back": "map"})
-
-
-func _update_info() -> void:
-	if selectable.is_empty() or not is_instance_valid(info_label):
-		return
-	var id: int = selectable[sel_idx]
-	var n: Dictionary = Game.node(id)
-	var desc = ""
-	match n["type"]:
-		"battle":
-			desc = "塔の魔物との戦闘。"
-		"elite":
-			desc = "手強い敵が待ち構えている。勝てば加護を得られる。"
-		"shop":
-			desc = "行商の異形が店を開いている。"
-		"event":
-			desc = "何かが起こりそうだ。"
-		"camp":
-			desc = "焚火を囲んで休息できる。"
-		"story":
-			desc = "物語が動く。（必ず通る）"
-		"boss":
-			desc = "この層の主が待つ。エレベーターはその先だ。"
-	info_label.text = "[b][color=#%s]%s[/color][/b]\n%s" % [TYPE_COLOR[n["type"]].to_html(false), TYPE_NAME[n["type"]], desc]
-
-
-func _process(delta: float) -> void:
-	t += delta
-	queue_redraw()
-
-
-var stick_dir := 0
-
-
-func _unhandled_input(event: InputEvent) -> void:
-	if locked or Main.inst.busy:
-		return
-	if event.is_action_pressed("skit"):
-		_play_next_skit()
-		return
-	if event.is_action_pressed("menu") or event.is_action_pressed("pause"):
-		_open_menu()
-		return
-	if selectable.is_empty():
-		return
-	if event is InputEventJoypadMotion:
-		# スティックは倒した瞬間だけ1マス動かす
-		if event.axis != JOY_AXIS_LEFT_X:
-			return
-		var d = 0 if abs(event.axis_value) < 0.5 else int(sign(event.axis_value))
-		if d == stick_dir:
-			return
-		stick_dir = d
-		if d != 0:
-			sel_idx = (sel_idx + d + selectable.size()) % selectable.size()
-			Sfx.play("select")
-			_update_info()
-		return
-	if event.is_action_pressed("move_left") or event.is_action_pressed("ui_left"):
-		sel_idx = (sel_idx - 1 + selectable.size()) % selectable.size()
-		Sfx.play("select")
-		_update_info()
-	elif event.is_action_pressed("move_right") or event.is_action_pressed("ui_right"):
-		sel_idx = (sel_idx + 1) % selectable.size()
-		Sfx.play("select")
-		_update_info()
-	elif event.is_action_pressed("ui_accept") or event.is_action_pressed("attack"):
-		_enter(selectable[sel_idx])
-	elif event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
-		for i in range(selectable.size()):
-			if node_pos[selectable[i]].distance_to(event.position) < 30:
-				sel_idx = i
-				_enter(selectable[i])
-				return
-	elif event is InputEventMouseMotion:
-		for i in range(selectable.size()):
-			if node_pos[selectable[i]].distance_to(event.position) < 30 and sel_idx != i:
-				sel_idx = i
-				Sfx.play("select")
-				_update_info()
-
-
-func _enter(id: int) -> void:
-	if locked:
-		return
-	locked = true
-	Sfx.play("confirm")
-	Game.enter_node(id)
-	var n: Dictionary = Game.node(id)
-	var fd: Dictionary = DB.floor_data(Game.floor_num)
-	match n["type"]:
-		"battle":
-			var g: Array = fd["groups"][Game.rng.randi() % fd["groups"].size()]
-			Main.inst.goto("battle", {"enemies": g, "kind": "battle"})
-		"elite":
-			var e: Array = fd["elites"][Game.rng.randi() % fd["elites"].size()]
-			Main.inst.goto("battle", {"enemies": e, "kind": "elite"})
-		"shop":
-			Main.inst.goto("shop", {})
-		"event":
-			Main.inst.goto("event", {})
-		"camp":
-			Main.inst.goto("camp", {})
-		"story":
-			var fs: Dictionary = DB.Story.FLOORS.get(Game.floor_num, {})
-			if fs.has("mid"):
-				await _story(fs["mid"])
-			Game.complete_node()
-			Game.check_skits("story_mid")
-			for m in Game.party:
-				m["hp"] = max(m["hp"], int(Game.max_hp(m["id"]) * 0.5))
-			Game.save_game()
-			_refresh()
-			locked = false
-		"boss":
-			var fs2: Dictionary = DB.Story.FLOORS.get(Game.floor_num, {})
-			if fs2.has("boss_pre"):
-				await _story(fs2["boss_pre"])
-			Main.inst.goto("battle", {"enemies": fd["boss"], "kind": "boss"})
-
-
-func _draw() -> void:
-	var fd: Dictionary = DB.floor_data(Game.floor_num)
-	var top: Color = fd["bg_top"]
-	var bot: Color = fd["bg_bottom"]
-	for i in range(24):
-		draw_rect(Rect2(0, i * 30, 1280, 31), top.lerp(bot, i / 23.0).darkened(0.35))
-	# 塔の外壁
-	draw_rect(Rect2(40, 20, 820, 680), Color(0, 0, 0, 0.25))
-	draw_rect(Rect2(40, 20, 820, 680), Color(fd["accent"].r, fd["accent"].g, fd["accent"].b, 0.25), false, 2.0)
-	for i in range(12):
-		draw_line(Vector2(40, 20 + i * 57), Vector2(860, 20 + i * 57), Color(1, 1, 1, 0.03), 1.0)
-	var nodes: Dictionary = Game.map["nodes"]
-	var cur: int = Game.map["current"]
-	# 層の切り替え直後（新しいマップに描き直す前）は描かない
-	for id in nodes:
-		if not node_pos.has(int(id)):
-			return
-	# 道
-	for id in nodes:
-		var n: Dictionary = nodes[id]
-		for nx in n["next"]:
-			var a: Vector2 = node_pos[int(id)]
-			var b: Vector2 = node_pos[int(nx)]
-			var walked: bool = n["done"] and (nodes[nx]["done"] or nx == cur)
-			var col = Color(1, 0.9, 0.6, 0.9) if walked else Color(1, 1, 1, 0.22)
-			var seg = 10
-			for s in range(seg):
-				if s % 2 == 0:
-					draw_line(a.lerp(b, float(s) / seg), a.lerp(b, float(s + 1) / seg), col, 3.0 if walked else 2.0)
-	# マス
-	for id in nodes:
-		var n: Dictionary = nodes[id]
-		var p: Vector2 = node_pos[int(id)]
-		var tc: Color = TYPE_COLOR[n["type"]]
-		var r = 24.0 if n["type"] != "boss" else 34.0
-		var is_sel: bool = not selectable.is_empty() and selectable[sel_idx] == int(id) and not locked
-		var can: bool = int(id) in selectable
-		if can:
-			var pulse = 4.0 + sin(t * 5.0) * 3.0
-			draw_circle(p, r + pulse + (6 if is_sel else 0), Color(tc.r, tc.g, tc.b, 0.25))
-		var fill = Color(0.08, 0.08, 0.12, 0.95)
-		if n["done"]:
-			fill = Color(0.25, 0.22, 0.18, 0.95)
-		draw_circle(p, r, fill)
-		draw_arc(p, r, 0, TAU, 32, tc if (can or n["done"] or int(id) == cur) else Color(tc.r, tc.g, tc.b, 0.45), 3.0 if not is_sel else 5.0)
-		var icon: String = ICON[n["type"]]
-		var fs = 24 if n["type"] != "boss" else 32
-		draw_string(UI.FONT_BOLD, p + Vector2(-fs / 2.0, fs / 2.6), icon, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, tc if not n["done"] else Color(0.6, 0.6, 0.6))
-		if int(id) == cur:
-			_draw_party_marker(p)
-	if cur < 0:
-		_draw_party_marker(Vector2(450, 700))
-	draw_string(UI.FONT_BOLD, Vector2(60, 56), "%dF" % Game.floor_num, HORIZONTAL_ALIGNMENT_LEFT, -1, 30, Color(1, 1, 1, 0.5))
-
-
-func _draw_party_marker(p: Vector2) -> void:
-	var y = sin(t * 4.0) * 4.0
-	draw_circle(p + Vector2(0, -42 + y), 10, Color(0.85, 0.22, 0.24))
-	draw_circle(p + Vector2(14, -38 + y), 7, Color(1.0, 0.62, 0.3))
-	UI.poly(self, PackedVector2Array([p + Vector2(-6, -30 + y), p + Vector2(6, -30 + y), p + Vector2(0, -22 + y)]), Color(0.85, 0.22, 0.24))
