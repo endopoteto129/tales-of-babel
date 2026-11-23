@@ -104,9 +104,14 @@ func _flow() -> void:
 			e = o
 			break
 	s.ppos = e["pos"] + Vector2(0, 40)
-	await get_tree().create_timer(1.5).timeout
-	b = main.screen
+	var wait_t := 0.0
+	while main.screen_name != "battle" and wait_t < 8.0:
+		if is_instance_valid(s) and main.screen == s and not s.locked:
+			s.ppos = e["pos"] + Vector2(0, 40)
+		await get_tree().process_frame
+		wait_t += get_process_delta_time()
 	await get_tree().create_timer(2.0).timeout
+	b = main.screen
 	b.escape()
 	await get_tree().create_timer(1.5).timeout
 	s = main.screen

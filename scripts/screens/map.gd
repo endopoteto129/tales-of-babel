@@ -8,6 +8,9 @@ const DASH_MULT := 1.55
 const SOLID_TILES := "#To~ "
 const OBJ_SOLID := "CMNF?B"
 const VIEW := Vector2(1280, 720)
+# 第一層の出発地点から最初の宝箱までの描画プレビュー。
+const GRASS_DETAIL_AREA := Rect2i(0, 26, 19, 10)
+const DETAIL_CELL := 32
 # 敵シンボルの動き
 const WANDER_SPEED := 70.0
 const CHASE_SPEED := 190.0
@@ -22,6 +25,9 @@ var rows: Array = []
 var W := 0
 var H := 0
 var ftheme := "grass"
+var field_backdrop: Texture2D
+var backdrop_mask: PackedByteArray
+var grass_detail: Texture2D
 var view: Node2D
 var hud: Control
 var ppos := Vector2.ZERO
@@ -62,6 +68,13 @@ func setup(p: Dictionary) -> void:
 func _ready() -> void:
 	UI.full(self)
 	_load_floor()
+	_load_field_backdrop()
+	if Game.floor_num == 1 and ftheme == "grass":
+		var detail_path := "res://assets/field_detail/grass.png"
+		if ResourceLoader.exists(detail_path):
+			var atlas := load(detail_path) as Texture2D
+			if atlas != null and atlas.get_size() == Vector2(8, 8) * DETAIL_CELL:
+				grass_detail = atlas
 	view = View.new()
 	view.s = self
 	view.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
@@ -743,15 +756,128 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 # ------------------------------------------------------------ 描画（マップ）
+func _load_field_backdrop() -> void:
+	var path := "res://assets/field_bg/%s.png" % ftheme
+	if not ResourceLoader.exists(path):
+		return
+	field_backdrop = load(path) as Texture2D
+	if field_backdrop == null:
+		return
+	# 歩ける場所を囲む壁は一列以上残し、奥の壁とマップ外から遠景を見せる。
+	# このマスクは描画専用。地形データや当たり判定には使わない。
+	backdrop_mask.resize(W * H)
+	for y in range(H):
+		for x in range(W):
+			var tile := ch(x, y)
+			if tile == " " or (tile == "#" and _is_deep_wall(x, y)):
+				backdrop_mask[y * W + x] = 1
+
+
+func _is_deep_wall(x: int, y: int) -> bool:
+	for yy in range(maxi(0, y - 1), mini(H, y + 2)):
+		for xx in range(maxi(0, x - 1), mini(W, x + 2)):
+			if not FieldArt.is_wallish(ch(xx, yy)):
+				return false
+	return true
+
+
+func _draw_field_backdrop(ci: CanvasItem) -> void:
+	var travel := (Vector2(W, H) * TS - VIEW).max(Vector2.ONE)
+	var progress := (cam / travel).clamp(Vector2.ZERO, Vector2.ONE)
+	var overscan := Vector2(160.0, 90.0)
+	var area := VIEW + overscan
+	# アスペクト比を保って画面を覆い、地形よりゆっくり動かす。
+	var source := field_backdrop.get_size()
+	var scale_factor := maxf(area.x / source.x, area.y / source.y)
+	var size := source * scale_factor
+	var pan := overscan * progress * Vector2(1.0, 0.6)
+	var offset := ((size - VIEW - overscan) / 2.0 + pan).round()
+	ci.draw_texture_rect(field_backdrop, Rect2(cam - offset, size), false, Color(0.90, 0.94, 0.93))
+
+
+func _shows_backdrop(x: int, y: int) -> bool:
+	return x < 0 or x >= W or y < 0 or y >= H or backdrop_mask[y * W + x] == 1
+
+
+func _draw_backdrop_ledge(ci: CanvasItem, x: int, y: int) -> void:
+	# 森の縁に岩肌を重ね、手前の地形が遠景より高いことを示す。
+	var edge := Vector2(x * TS, (y + 1) * TS)
+	var left := 8.0 if _shows_backdrop(x - 1, y) else 0.0
+	var right := 8.0 if _shows_backdrop(x + 1, y) else 0.0
+	var depth_px := 32.0 + 4.0 * ((x * 7 + y * 3) % 3)
+	UI.poly(ci, PackedVector2Array([
+		edge, edge + Vector2(TS, 0), edge + Vector2(TS - right, depth_px - right),
+		edge + Vector2(TS - right * 2.0, depth_px), edge + Vector2(left * 2.0, depth_px),
+		edge + Vector2(left, depth_px - left)
+	]), Color("#37494a"))
+	ci.draw_rect(Rect2(edge, Vector2(TS, 8)), Color("#586753"))
+	for i in range(3):
+		var dx := float(12 + i * 16 + (x + y + i) % 2 * 4)
+		ci.draw_rect(Rect2(edge + Vector2(dx, 8), Vector2(8, depth_px - 12 - i * 4)), Color("#495a52"))
+		ci.draw_rect(Rect2(edge + Vector2(dx, 8), Vector2(4, 12)), Color("#68715a"))
+
+
+func _has_grass_detail(x: int, y: int) -> bool:
+	return grass_detail != null and GRASS_DETAIL_AREA.has_point(Vector2i(x, y))
+
+
+func _draw_detail_ground(ci: CanvasItem, c: String, x: int, y: int) -> bool:
+	if not _has_grass_detail(x, y) or c not in ".,:\"TPECLMNF?BG":
+		return false
+	var cell: Vector2i
+	var mark := absi(x * 37 + y * 19 + x * y * 11)
+	if c == ":":
+		var road := 0
+		if ch(x, y - 1) == ":":
+			road |= 1
+		if ch(x + 1, y) == ":":
+			road |= 2
+		if ch(x, y + 1) == ":":
+			road |= 4
+		if ch(x - 1, y) == ":":
+			road |= 8
+		if (road & 2) != 0 and not _has_grass_detail(x + 1, y):
+			# 見本区間の東端で、従来の道の幅へつなぐ。
+			cell = Vector2i((road & 1) | ((road & 12) >> 1), 7)
+		else:
+			var variant := mark % 2
+			cell = Vector2i(road % 8, 1 + (road >> 3) + variant * 2)
+	else:
+		var variant := 6 + mark % 2 if c == "," else mark % 6
+		cell = Vector2i(variant, 0)
+	var tile_size := Vector2(TS, TS)
+	var src_size := Vector2(DETAIL_CELL, DETAIL_CELL)
+	var dst := Rect2(Vector2(x, y) * TS, tile_size)
+	ci.draw_texture_rect_region(grass_detail, dst, Rect2(Vector2(cell) * src_size, src_size))
+	return true
+
+
+func _draw_detail_tree(ci: CanvasItem, x: int, y: int) -> void:
+	var variant := absi(x * 17 + y * 11 + x * y * 3) % 4
+	var src := Rect2(variant * DETAIL_CELL, 5 * DETAIL_CELL, DETAIL_CELL, DETAIL_CELL * 2)
+	var dst := Rect2(x * TS, (y - 1) * TS, TS, TS * 2)
+	ci.draw_texture_rect_region(grass_detail, dst, src)
+
+
 func _draw_world(ci: CanvasItem) -> void:
+	if field_backdrop != null:
+		_draw_field_backdrop(ci)
 	var x0: int = max(0, int(cam.x / TS) - 1)
 	var y0: int = max(0, int(cam.y / TS) - 1)
 	var x1: int = min(W - 1, int((cam.x + VIEW.x) / TS) + 1)
 	var y1: int = min(H - 1, int((cam.y + VIEW.y) / TS) + 2)
+	if field_backdrop != null:
+		for y in range(y0, y1 + 1):
+			for x in range(x0, x1 + 1):
+				if ch(x, y) == "#" and not _shows_backdrop(x, y) and _shows_backdrop(x, y + 1):
+					_draw_backdrop_ledge(ci, x, y)
 	for y in range(y0, y1 + 1):
 		for x in range(x0, x1 + 1):
+			if field_backdrop != null and _shows_backdrop(x, y):
+				continue
 			var c := ch(x, y)
-			FieldArt.draw_ground(ci, ftheme, c, x, y, ch(x, y + 1), ch(x, y - 1), t)
+			if not _draw_detail_ground(ci, c, x, y):
+				FieldArt.draw_ground(ci, ftheme, c, x, y, ch(x, y + 1), ch(x, y - 1), t)
 	# 中盤ストーリーの地点
 	if not gate_open():
 		for y in range(y0, y1 + 1):
@@ -779,7 +905,11 @@ func _draw_world(ci: CanvasItem) -> void:
 	for it in items:
 		match it[1]:
 			0:
-				FieldArt.draw_tall(ci, ftheme, it[3], it[2].x, it[2].y, t)
+				var pos: Vector2i = it[2]
+				if it[3] == "T" and _has_grass_detail(pos.x, pos.y):
+					_draw_detail_tree(ci, pos.x, pos.y)
+				else:
+					FieldArt.draw_tall(ci, ftheme, it[3], pos.x, pos.y, t)
 			1:
 				_draw_obj(ci, it[2])
 			2:
