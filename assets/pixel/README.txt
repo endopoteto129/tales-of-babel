@@ -16,3 +16,7 @@ https://claude.ai/artifact/6mcN2TMEWSbPwH9cjfjbem
   ・PNG、背景は透明。アンチエイリアスなし。指定の大きさちょうどで描く
   ・キャラの足の裏はコマの下端中央。バトルと敵シンボルは右向き（左はゲームが反転）
   ・エフェクトは白〜灰色で描く（属性の色はゲームが乗せる）
+
+詳しい仕様は同じフォルダの SPEC.md、できた画像の検査は
+  python art_src/pixel/check_pixel.py
+他のAI（Codex）への依頼文は art_src/pixel/CODEX_PROMPT.md にあります。
