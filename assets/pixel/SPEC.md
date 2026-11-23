@@ -58,6 +58,8 @@
 | ファイル | 中身 |
 |---|---|
 | `field/chara_ren.png` | レン（マップで操作するキャラ）。頂上では赤いマントを羽織るので、マントありの版を `field/chara_ren_cape.png` として置くと、頂上ではそちらに切り替わります |
+| `field/chara_angie.png` | アンジーの4方向歩行。探索の先頭がアンジーの場合に使います |
+| `field/chara_nine.png` | ナインの4方向歩行。探索イベントなどで使える素材です（現行の通常探索では操作キャラになりません） |
 | `field/npc_merchant.png` | 異形の行商人（店） |
 | `field/npc_towner.png` | 異形の街の住人 |
 | `field/npc_ghost.png` | 闘技場の鎧だけの剣闘士（幽霊） |

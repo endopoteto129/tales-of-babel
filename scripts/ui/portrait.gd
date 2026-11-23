@@ -3,6 +3,9 @@
 class_name Portrait
 extends Control
 
+# 立ち絵上の顔位置（画像の左上を原点とする比率）。
+const FACE_ANCHORS := {"angie": Vector2(0.53, 0.145), "nine": Vector2(0.515, 0.28)}
+
 var cid := ""
 var expr := ""
 var flip := false
@@ -34,8 +37,7 @@ func _draw() -> void:
 		var sz: Vector2 = tex.get_size() * k
 		var pos := Vector2((size.x - sz.x) / 2.0, size.y - sz.y + sin(_t * 2.0) * 1.5 + bob)
 		if flip:
-			# 幅をマイナスにすると左右反転で描ける
-			pos.x += sz.x
+			# Godotは負の幅でも左端を維持してテクスチャだけ反転する。
 			sz.x = -sz.x
 		draw_texture_rect(tex, Rect2(pos, sz), false)
 		return
@@ -153,7 +155,12 @@ func face_point() -> Vector2:
 	var tex := _image()
 	if tex:
 		var k: float = min(size.x / tex.get_width(), size.y / tex.get_height())
-		return Vector2(size.x / 2.0, size.y - tex.get_height() * k * 0.76)
+		var anchor: Vector2 = FACE_ANCHORS.get(cid, Vector2(0.5, 0.24))
+		if flip:
+			anchor.x = 1.0 - anchor.x
+		var drawn := tex.get_size() * k
+		var origin := Vector2((size.x - drawn.x) / 2.0, size.y - drawn.y)
+		return origin + drawn * anchor
 	var s: float = min(size.x / 220.0, size.y / 260.0)
 	var hc := _head_c() if cid != "pots" else Vector2(0, -130)
 	return Vector2(size.x / 2.0, size.y) + hc * s

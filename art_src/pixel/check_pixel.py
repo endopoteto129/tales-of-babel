@@ -17,6 +17,8 @@ for t in ["grass", "town", "bamboo", "colosseum", "library", "factory", "summit"
 for c in ["chara_ren", "npc_merchant", "npc_towner", "npc_ghost", "npc_librarian", "npc_robot"]:
     SPEC[f"field/{c}.png"] = (48, 96)
 SPEC["field/chara_ren_cape.png"] = ((48, 96), "optional")
+for c in ["chara_angie", "chara_nine"]:
+    SPEC[f"field/{c}.png"] = ((48, 96), "optional")
 SYM = ["slime", "bat", "wolf", "golem", "wisp", "ikei", "oni", "lion", "book", "gear",
        "soldier", "gunner", "drone", "mage_soldier"]
 for e in SYM:

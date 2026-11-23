@@ -8,9 +8,8 @@ const DASH_MULT := 1.55
 const SOLID_TILES := "#To~ "
 const OBJ_SOLID := "CMNF?B"
 const VIEW := Vector2(1280, 720)
-# 第一層の出発地点から最初の宝箱までの描画プレビュー。
-const GRASS_DETAIL_AREA := Rect2i(0, 26, 19, 10)
 const DETAIL_CELL := 32
+const GRASS_DETAIL_ATLAS := Vector2(8, 15) * DETAIL_CELL
 # 敵シンボルの動き
 const WANDER_SPEED := 70.0
 const CHASE_SPEED := 190.0
@@ -73,7 +72,7 @@ func _ready() -> void:
 		var detail_path := "res://assets/field_detail/grass.png"
 		if ResourceLoader.exists(detail_path):
 			var atlas := load(detail_path) as Texture2D
-			if atlas != null and atlas.get_size() == Vector2(8, 8) * DETAIL_CELL:
+			if atlas != null and atlas.get_size() == GRASS_DETAIL_ATLAS:
 				grass_detail = atlas
 	view = View.new()
 	view.s = self
@@ -802,8 +801,14 @@ func _shows_backdrop(x: int, y: int) -> bool:
 func _draw_backdrop_ledge(ci: CanvasItem, x: int, y: int) -> void:
 	# 森の縁に岩肌を重ね、手前の地形が遠景より高いことを示す。
 	var edge := Vector2(x * TS, (y + 1) * TS)
-	var left := 8.0 if _shows_backdrop(x - 1, y) else 0.0
-	var right := 8.0 if _shows_backdrop(x + 1, y) else 0.0
+	var open_left := _shows_backdrop(x - 1, y)
+	var open_right := _shows_backdrop(x + 1, y)
+	if grass_detail != null:
+		var edges := int(open_left) + int(open_right) * 2
+		_draw_detail_tile(ci, edge, Vector2i(edges + ((x + y) % 2) * 4, 13))
+		return
+	var left := 8.0 if open_left else 0.0
+	var right := 8.0 if open_right else 0.0
 	var depth_px := 32.0 + 4.0 * ((x * 7 + y * 3) % 3)
 	UI.poly(ci, PackedVector2Array([
 		edge, edge + Vector2(TS, 0), edge + Vector2(TS - right, depth_px - right),
@@ -817,38 +822,66 @@ func _draw_backdrop_ledge(ci: CanvasItem, x: int, y: int) -> void:
 		ci.draw_rect(Rect2(edge + Vector2(dx, 8), Vector2(4, 12)), Color("#68715a"))
 
 
-func _has_grass_detail(x: int, y: int) -> bool:
-	return grass_detail != null and GRASS_DETAIL_AREA.has_point(Vector2i(x, y))
+func _detail_neighbors(x: int, y: int, tiles: String) -> int:
+	var mask := 0
+	if ch(x, y - 1) in tiles:
+		mask |= 1
+	if ch(x + 1, y) in tiles:
+		mask |= 2
+	if ch(x, y + 1) in tiles:
+		mask |= 4
+	if ch(x - 1, y) in tiles:
+		mask |= 8
+	return mask
+
+
+func _draw_detail_tile(ci: CanvasItem, origin: Vector2, cell: Vector2i) -> void:
+	var size_px := Vector2(DETAIL_CELL, DETAIL_CELL)
+	var src := Rect2(Vector2(cell) * size_px, size_px)
+	ci.draw_texture_rect_region(grass_detail, Rect2(origin, Vector2(TS, TS)), src)
+
+
+func _is_wide_bridge_south(x: int, y: int) -> bool:
+	return ch(x, y) == ":" and ch(x, y - 1) == "=" and ch(x, y + 1) == "~"
+
+
+func _detail_bridge_cell(x: int, y: int, south: bool) -> Vector2i:
+	var bridge_y := y - 1 if south else y
+	var sides := int(ch(x - 1, bridge_y) == "=") + int(ch(x + 1, bridge_y) == "=") * 2
+	if south:
+		return Vector2i(sides + 4, 14)
+	return Vector2i(sides, 14 if _is_wide_bridge_south(x, y + 1) else 12)
 
 
 func _draw_detail_ground(ci: CanvasItem, c: String, x: int, y: int) -> bool:
-	if not _has_grass_detail(x, y) or c not in ".,:\"TPECLMNF?BG":
+	if grass_detail == null:
 		return false
 	var cell: Vector2i
 	var mark := absi(x * 37 + y * 19 + x * y * 11)
-	if c == ":":
-		var road := 0
-		if ch(x, y - 1) == ":":
-			road |= 1
-		if ch(x + 1, y) == ":":
-			road |= 2
-		if ch(x, y + 1) == ":":
-			road |= 4
-		if ch(x - 1, y) == ":":
-			road |= 8
-		if (road & 2) != 0 and not _has_grass_detail(x + 1, y):
-			# 見本区間の東端で、従来の道の幅へつなぐ。
-			cell = Vector2i((road & 1) | ((road & 12) >> 1), 7)
-		else:
-			var variant := mark % 2
-			cell = Vector2i(road % 8, 1 + (road >> 3) + variant * 2)
-	else:
-		var variant := 6 + mark % 2 if c == "," else mark % 6
-		cell = Vector2i(variant, 0)
-	var tile_size := Vector2(TS, TS)
-	var src_size := Vector2(DETAIL_CELL, DETAIL_CELL)
-	var dst := Rect2(Vector2(x, y) * TS, tile_size)
-	ci.draw_texture_rect_region(grass_detail, dst, Rect2(Vector2(cell) * src_size, src_size))
+	match c:
+		":":
+			if _is_wide_bridge_south(x, y):
+				cell = _detail_bridge_cell(x, y, true)
+			else:
+				var road := _detail_neighbors(x, y, ":")
+				cell = Vector2i(road % 8, 1 + (road >> 3) + (mark % 2) * 2)
+		"#":
+			var face := not FieldArt.is_wallish(ch(x, y + 1))
+			cell = Vector2i(mark % 4 + (4 if face else 0), 7)
+		"~":
+			# 橋の下も河川としてつなぎ、陸と接する側だけ浅瀬にする。
+			var bank := 15 ^ _detail_neighbors(x, y, "~=")
+			var wave := (int(t * 2.0) + x + y) % 2
+			cell = Vector2i(bank % 8, 8 + (bank >> 3) + wave * 2)
+		"=":
+			cell = _detail_bridge_cell(x, y, false)
+		",":
+			cell = Vector2i(6 + mark % 2, 0)
+		_:
+			if c not in ".\"To+PECLMNF?BG":
+				return false
+			cell = Vector2i(mark % 6, 0)
+	_draw_detail_tile(ci, Vector2(x, y) * TS, cell)
 	return true
 
 
@@ -906,8 +939,10 @@ func _draw_world(ci: CanvasItem) -> void:
 		match it[1]:
 			0:
 				var pos: Vector2i = it[2]
-				if it[3] == "T" and _has_grass_detail(pos.x, pos.y):
+				if grass_detail != null and it[3] == "T":
 					_draw_detail_tree(ci, pos.x, pos.y)
+				elif grass_detail != null and it[3] == "o":
+					_draw_detail_tile(ci, Vector2(pos) * TS, Vector2i(4, 12))
 				else:
 					FieldArt.draw_tall(ci, ftheme, it[3], pos.x, pos.y, t)
 			1:

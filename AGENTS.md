@@ -124,5 +124,6 @@ cd C:\Users\endop\Documents\Godot\tales_of_babel
 
 - ドット絵：`assets/pixel/` にPNGを置くと、マップと戦闘の絵が自動で差し替わります。仕様は `assets/pixel/SPEC.md`、検査は `python art_src/pixel/check_pixel.py`。読み込みは `scripts/ui/pixel_art.gd`（`PixelArt.tex("field/chara_ren.png")` のように使い、ファイルがなければ `null` を返すので、そのときは図形で描きます）。
 - 立ち絵：`assets/portraits/<キャラid>/<表情>.png`（`portrait.<id>.<表情>.png` でも可）。表情の画像がなければ `normal.png` を使います。
+  - 立ち絵は **幅600ピクセル** に縮めて置いてください（ブラウザ版が重くならないように）。大きい元画像は `art_src/portraits/<キャラid>/` に保管します（`art_src/` はゲームに読み込まれません）。
 - スチル：`assets/stills/<名前>.png`。ストーリーの `["@cg", "名前"]` で表示されます。
 - 新しく絵を差し替えられる場所を作るときも、「ファイルがなければ今までどおり図形で描く」形にしてください。
