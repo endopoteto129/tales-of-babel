@@ -60,7 +60,24 @@ func _process(delta: float) -> void:
 	queue_redraw()
 
 
+@onready var campsite: Texture2D = UI.art("camp.png")
+@onready var fire: Texture2D = UI.art("campfire.png")
+
+
 func _draw() -> void:
+	if campsite:
+		draw_texture_rect(campsite, Rect2(0, 0, 1280, 720), false)
+		draw_rect(Rect2(780, 0, 500, 720), Color(0.02, 0.02, 0.06, 0.39))
+	if not campsite:
+		_draw_original_fire()
+	else:
+		var frame := int(t * 12.0) % PixelArt.strip_frames(fire)
+		var cell := float(fire.get_height())
+		draw_texture_rect_region(fire, Rect2(355, 339, 140, 140), Rect2(frame * cell, 0, cell, cell))
+	_draw_camp_party()
+
+
+func _draw_original_fire() -> void:
 	draw_rect(Rect2(0, 0, 1280, 720), Color(0.02, 0.02, 0.06))
 	for i in range(60):
 		var p = Vector2(fmod(i * 211.0, 1280.0), fmod(i * 97.0, 300.0))
@@ -87,7 +104,10 @@ func _draw() -> void:
 	for s2 in sparks:
 		var a2: float = 1.0 - s2[2] / s2[3]
 		draw_circle(s2[0], 2.0, Color(1.0, 0.7, 0.3, a2))
-	# 焚火を囲む仲間（シルエット）
+
+
+func _draw_camp_party() -> void:
+	# 焚火を囲む仲間
 	var members: Array = Game.present_party().map(func(m) -> String: return m["id"])
 	if not Game.flags.get("nine_absent", false):
 		members.append("nine")
@@ -104,9 +124,13 @@ func _draw() -> void:
 		var c: Color = DB.ccolor(members[i]).darkened(0.35)
 		var lit = Color(1.0, 0.6, 0.3, 0.35)
 		var hgt = 60.0 if members[i] != "nine" else 44.0
-		draw_rect(Rect2(p2 + Vector2(-16, -hgt), Vector2(32, hgt)), c)
-		draw_circle(p2 + Vector2(0, -hgt - 14), 15, c.lightened(0.1))
-		draw_rect(Rect2(p2 + Vector2(-16, -hgt), Vector2(6, hgt)), lit)
+		var walker := PixelArt.tex("field/chara_%s.png" % members[i])
+		if campsite and walker:
+			PixelArt.draw_cell(self, walker, 3, 4, 1, 2 if i < left_n else 1, p2, false, Color(0.95, 0.83, 0.70), 3.0)
+		else:
+			draw_rect(Rect2(p2 + Vector2(-16, -hgt), Vector2(32, hgt)), c)
+			draw_circle(p2 + Vector2(0, -hgt - 14), 15, c.lightened(0.1))
+			draw_rect(Rect2(p2 + Vector2(-16, -hgt), Vector2(6, hgt)), lit)
 		draw_string(UI.FONT, p2 + Vector2(-30, 26), DB.cname(members[i]), HORIZONTAL_ALIGNMENT_CENTER, 60, 14, Color(1, 0.85, 0.7, 0.8))
 	if not Game.flags.get("pots_absent", false):
 		var pp = Vector2(440, 330 + sin(t * 2.0) * 6)

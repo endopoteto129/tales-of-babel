@@ -44,6 +44,7 @@ func _ready() -> void:
 	add_child(fade_layer)
 	fade_layer.add_child(fade)
 	Game.notified.connect(_on_notified)
+	add_child(load("res://scripts/ui/touch_controls.gd").new())
 	var args = OS.get_cmdline_user_args()
 	if "--shots" in args:
 		add_child(load("res://scripts/shots.gd").new())
@@ -59,6 +60,12 @@ func _ready() -> void:
 		return
 	if "--fieldtest" in args:
 		add_child(load("res://scripts/fieldtest.gd").new())
+		return
+	if "--touchtest" in args:
+		add_child(load("res://scripts/touchtest.gd").new())
+		return
+	if "--uitest" in args:
+		add_child(load("res://scripts/uitest.gd").new())
 		return
 	if "--autotest" in args:
 		var t: Node = load("res://scripts/autotest.gd").new()

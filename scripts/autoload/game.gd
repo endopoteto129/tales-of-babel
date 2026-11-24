@@ -28,6 +28,7 @@ var rng := RandomNumberGenerator.new()
 const SETTINGS_PATH := "user://settings.cfg"
 var battle_25d := false  # バトルを 2.5D（奥行きあり・試作）にする。セーブとは別に覚えておく
 var pad_mode := false  # 最後の入力がゲームパッドなら true（ボタン表示を切り替える）
+var touch_mode := false  # 最後の入力がタッチ（スマホ・タブレット）なら true。画面にタッチ操作ボタンを出す
 var quiet := false  # true の間は通知（トースト）を出さない（デバッグジャンプ用）
 
 # 通常プレイでの想定レベル（層の開始時 / ボス戦時）。バランス確認とデバッグジャンプで使う
@@ -56,7 +57,16 @@ func set_battle_25d(on: bool) -> void:
 
 func _input(event: InputEvent) -> void:
 	var pad = event is InputEventJoypadButton or (event is InputEventJoypadMotion and abs(event.axis_value) > 0.5)
-	var kb = event is InputEventKey or event is InputEventMouseButton
+	# タッチから作られたマウス操作（device = -1）はキーボード扱いにしない
+	var emulated: bool = event is InputEventMouse and event.device == InputEvent.DEVICE_ID_EMULATION
+	var kb = event is InputEventKey or (event is InputEventMouseButton and not emulated)
+	if event is InputEventScreenTouch and not touch_mode:
+		touch_mode = true
+		pad_mode = false
+		input_mode_changed.emit()
+	elif (pad or kb) and touch_mode:
+		touch_mode = false
+		input_mode_changed.emit()
 	if pad and not pad_mode:
 		pad_mode = true
 		input_mode_changed.emit()
@@ -74,7 +84,18 @@ const KEY_NAMES := {
 }
 
 
+# タッチ操作のときの表示名（画面のボタンの文字に合わせる）
+const TOUCH_NAMES := {
+	"attack": "［攻撃］", "arte": "［術技］", "jump": "［跳ぶ］", "guard": "［ガード］", "dodge": "［回避］",
+	"target": "［狙う］", "link": "［秘技］", "overlimit": "［OVL］", "pause": "［Ⅱ］",
+	"skit": "［スキット］", "menu": "［メニュー］", "accept": "［調べる］", "cancel": "［戻る］",
+	"allies": "ポーズメニュー", "move": "スティック", "dir": "スティック",
+}
+
+
 func key(action: String) -> String:
+	if touch_mode:
+		return TOUCH_NAMES.get(action, action)
 	var names: Array = KEY_NAMES.get(action, [action, action])
 	return names[1] if pad_mode else names[0]
 

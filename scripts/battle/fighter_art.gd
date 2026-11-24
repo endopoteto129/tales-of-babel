@@ -23,7 +23,11 @@ static func draw_fighter(f: Fighter) -> void:
 			var px = sin(f.anim_t * 3.0 + i * 1.7) * f.body.x * 0.6
 			var py = -fmod(f.anim_t * 120.0 + i * 37.0, B0 * 1.2)
 			f.draw_circle(Vector2(px, py), 3.0, Color(1.0, 0.9, 0.5, 0.8 * a))
-	var sheet: Texture2D = PixelArt.tex("battle/%s.png" % f.cid)
+	var sheet: Texture2D = null
+	if f.cid == "ren" and Game.flags.get("red_cape", false):
+		sheet = PixelArt.tex("battle/ren_cape.png")
+	if sheet == null:
+		sheet = PixelArt.tex("battle/%s.png" % f.cid)
 	if sheet:
 		_draw_sheet(f, sheet, a)
 	else:

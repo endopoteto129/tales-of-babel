@@ -4,7 +4,16 @@ class_name Portrait
 extends Control
 
 # 立ち絵上の顔位置（画像の左上を原点とする比率）。
-const FACE_ANCHORS := {"angie": Vector2(0.53, 0.145), "nine": Vector2(0.515, 0.28)}
+const FACE_ANCHORS := {
+	"ren": Vector2(0.54, 0.19),
+	"angie": Vector2(0.53, 0.145),
+	"sona": Vector2(0.53, 0.25),
+	"jin": Vector2(0.54, 0.24),
+	"john": Vector2(0.52, 0.19),
+	"nine": Vector2(0.515, 0.28),
+	"maria": Vector2(0.54, 0.22),
+	"pots": Vector2(0.50, 0.51),
+}
 
 var cid := ""
 var expr := ""

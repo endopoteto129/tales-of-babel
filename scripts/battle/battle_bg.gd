@@ -6,13 +6,30 @@ var boss := false
 var depth := false   # 2.5D（試作）のときは、奥行きのある地面を描く
 var t := 0.0
 var rnd: Array = []
+var _background_tex: Texture2D
 
 
 func _ready() -> void:
+	_background_tex = _pick_background()
 	var r = RandomNumberGenerator.new()
 	r.seed = hash(deco) + Game.floor_num
 	for i in range(64):
 		rnd.append(Vector3(r.randf(), r.randf(), r.randf()))
+
+
+func _pick_background() -> Texture2D:
+	# ボス専用素材を優先し、各場面では高精細版・従来版の順に探す。
+	for suffix in (["_boss", ""] if boss else [""]):
+		var filename := "%s%s.png" % [deco, suffix]
+		var path := "res://assets/battle_bg/" + filename
+		if ResourceLoader.exists(path):
+			var detail := load(path) as Texture2D
+			if detail != null and detail.get_size() == Vector2(640, 360):
+				return detail
+		var legacy := PixelArt.tex("battle_bg/" + filename)
+		if legacy != null:
+			return legacy
+	return null
 
 
 func _process(delta: float) -> void:
@@ -25,15 +42,10 @@ func _draw() -> void:
 	var top: Color = fd["bg_top"]
 	var bot: Color = fd["bg_bottom"]
 	var gr: Color = fd["ground"]
-	# ドット絵の背景（320×180）があればそれを使う。ボス戦用（_boss）があればボス戦ではそちら
-	var pix: Texture2D = null
-	if boss:
-		pix = PixelArt.tex("battle_bg/%s_boss.png" % deco)
-	if pix == null:
-		pix = PixelArt.tex("battle_bg/%s.png" % deco)
-	if pix:
+	# 高精細版（640×360）または従来版（320×180）を画面全体に描く。
+	if _background_tex != null:
 		texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-		draw_texture_rect(pix, Rect2(0, 0, 1280, 720), false)
+		draw_texture_rect(_background_tex, Rect2(0, 0, 1280, 720), false)
 		if depth:
 			_depth_floor(gr)
 		return

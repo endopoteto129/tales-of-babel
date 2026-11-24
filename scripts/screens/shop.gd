@@ -22,6 +22,7 @@ func _ready() -> void:
 	add_child(p)
 	var sc = ScrollContainer.new()
 	sc.custom_minimum_size = Vector2(680, 500)
+	sc.follow_focus = true  # コントローラーでカーソルを動かしたとき、見えない行まで自動で送る
 	p.add_child(sc)
 	list = VBoxContainer.new()
 	list.add_theme_constant_override("separation", 6)
@@ -79,7 +80,13 @@ func _price(id: String) -> int:
 
 func _refresh() -> void:
 	gald_label.text = "所持金  %d ガルド" % Game.gald
+	# 買い物の後もカーソルを同じ位置に残す（コントローラー操作で迷子にならないように）
+	var keep := -1
+	var f := get_viewport().gui_get_focus_owner()
+	if f != null and f.get_parent() == list:
+		keep = f.get_index()
 	for c in list.get_children():
+		list.remove_child(c)
 		c.queue_free()
 	list.add_child(UI.label("― 道具 ―", 18, UI.C_DIM))
 	for id in stock:
@@ -105,6 +112,12 @@ func _refresh() -> void:
 		b2.disabled = Game.gald < _price(id)
 		list.add_child(b2)
 	list.add_child(UI.button("店を出る", _leave, 20))
+	if keep >= 0:
+		for i in range(mini(keep, list.get_child_count() - 1), -1, -1):
+			var c := list.get_child(i)
+			if c is Button and not c.disabled:
+				c.grab_focus.call_deferred()
+				return
 	UI.focus_first(list)
 
 
@@ -146,6 +159,13 @@ func _say(sp: String, text: String) -> void:
 	Sfx.play("chat", 0.9, -8)
 
 
+func _unhandled_input(event: InputEvent) -> void:
+	# キャンセル（Bボタン・Esc）で店を出る
+	if event.is_action_pressed("ui_cancel") and not Main.inst.busy:
+		get_viewport().set_input_as_handled()
+		_leave()
+
+
 func _leave() -> void:
 	Main.inst.goto("map", {"after": "shop"})
 
@@ -155,7 +175,14 @@ func _process(delta: float) -> void:
 	queue_redraw()
 
 
+@onready var interior: Texture2D = UI.art("shop.png")
+
+
 func _draw() -> void:
+	if interior:
+		draw_texture_rect(interior, Rect2(0, 0, 1280, 720), false)
+		draw_rect(Rect2(0, 0, 755, 720), Color(0.07, 0.04, 0.10, 0.56))
+		return
 	draw_rect(Rect2(0, 0, 1280, 720), Color(0.12, 0.08, 0.12))
 	for i in range(8):
 		draw_circle(Vector2(100 + i * 160, 20), 14 + sin(t * 3 + i) * 2, Color(1.0, 0.7, 0.35, 0.6))

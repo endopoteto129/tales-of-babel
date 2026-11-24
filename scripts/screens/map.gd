@@ -9,7 +9,7 @@ const SOLID_TILES := "#To~ "
 const OBJ_SOLID := "CMNF?B"
 const VIEW := Vector2(1280, 720)
 const DETAIL_CELL := 32
-const GRASS_DETAIL_ATLAS := Vector2(8, 15) * DETAIL_CELL
+const FIELD_DETAIL_ATLAS := Vector2(8, 15) * DETAIL_CELL
 # 敵シンボルの動き
 const WANDER_SPEED := 70.0
 const CHASE_SPEED := 190.0
@@ -26,7 +26,7 @@ var H := 0
 var ftheme := "grass"
 var field_backdrop: Texture2D
 var backdrop_mask: PackedByteArray
-var grass_detail: Texture2D
+var field_detail: Texture2D
 var view: Node2D
 var hud: Control
 var ppos := Vector2.ZERO
@@ -68,12 +68,11 @@ func _ready() -> void:
 	UI.full(self)
 	_load_floor()
 	_load_field_backdrop()
-	if Game.floor_num == 1 and ftheme == "grass":
-		var detail_path := "res://assets/field_detail/grass.png"
-		if ResourceLoader.exists(detail_path):
-			var atlas := load(detail_path) as Texture2D
-			if atlas != null and atlas.get_size() == GRASS_DETAIL_ATLAS:
-				grass_detail = atlas
+	var detail_path := "res://assets/field_detail/%s.png" % ftheme
+	if ResourceLoader.exists(detail_path):
+		var atlas := load(detail_path) as Texture2D
+		if atlas and atlas.get_size() == FIELD_DETAIL_ATLAS:
+			field_detail = atlas
 	view = View.new()
 	view.s = self
 	view.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
@@ -765,11 +764,31 @@ func _load_field_backdrop() -> void:
 	# 歩ける場所を囲む壁は一列以上残し、奥の壁とマップ外から遠景を見せる。
 	# このマスクは描画専用。地形データや当たり判定には使わない。
 	backdrop_mask.resize(W * H)
+	var candidates := PackedByteArray()
+	candidates.resize(W * H)
+	var frontier: Array[Vector2i] = []
 	for y in range(H):
 		for x in range(W):
 			var tile := ch(x, y)
 			if tile == " " or (tile == "#" and _is_deep_wall(x, y)):
-				backdrop_mask[y * W + x] = 1
+				var index := y * W + x
+				candidates[index] = 1
+				if ftheme == "grass" or tile == " " or x == 0 or x == W - 1 or y == 0 or y == H - 1:
+					backdrop_mask[index] = 1
+					frontier.append(Vector2i(x, y))
+	# 街の屋根や工房の機械のように閉じた地形は、遠景でくり抜かない。
+	var head := 0
+	while head < frontier.size():
+		var point := frontier[head]
+		head += 1
+		for delta in [Vector2i.UP, Vector2i.RIGHT, Vector2i.DOWN, Vector2i.LEFT]:
+			var next: Vector2i = point + delta
+			if next.x < 0 or next.x >= W or next.y < 0 or next.y >= H:
+				continue
+			var index := next.y * W + next.x
+			if candidates[index] == 1 and backdrop_mask[index] == 0:
+				backdrop_mask[index] = 1
+				frontier.append(next)
 
 
 func _is_deep_wall(x: int, y: int) -> bool:
@@ -799,27 +818,28 @@ func _shows_backdrop(x: int, y: int) -> bool:
 
 
 func _draw_backdrop_ledge(ci: CanvasItem, x: int, y: int) -> void:
-	# 森の縁に岩肌を重ね、手前の地形が遠景より高いことを示す。
+	# 地形の縁に側面を描き、手前の地形が遠景より高いことを示す。
 	var edge := Vector2(x * TS, (y + 1) * TS)
 	var open_left := _shows_backdrop(x - 1, y)
 	var open_right := _shows_backdrop(x + 1, y)
-	if grass_detail != null:
+	if field_detail != null:
 		var edges := int(open_left) + int(open_right) * 2
 		_draw_detail_tile(ci, edge, Vector2i(edges + ((x + y) % 2) * 4, 13))
 		return
 	var left := 8.0 if open_left else 0.0
 	var right := 8.0 if open_right else 0.0
 	var depth_px := 32.0 + 4.0 * ((x * 7 + y * 3) % 3)
+	var face: Color = FieldArt.THEMES[ftheme]["face"]
 	UI.poly(ci, PackedVector2Array([
 		edge, edge + Vector2(TS, 0), edge + Vector2(TS - right, depth_px - right),
 		edge + Vector2(TS - right * 2.0, depth_px), edge + Vector2(left * 2.0, depth_px),
 		edge + Vector2(left, depth_px - left)
-	]), Color("#37494a"))
-	ci.draw_rect(Rect2(edge, Vector2(TS, 8)), Color("#586753"))
+	]), face.darkened(0.46))
+	ci.draw_rect(Rect2(edge, Vector2(TS, 8)), face.darkened(0.24))
 	for i in range(3):
 		var dx := float(12 + i * 16 + (x + y + i) % 2 * 4)
-		ci.draw_rect(Rect2(edge + Vector2(dx, 8), Vector2(8, depth_px - 12 - i * 4)), Color("#495a52"))
-		ci.draw_rect(Rect2(edge + Vector2(dx, 8), Vector2(4, 12)), Color("#68715a"))
+		ci.draw_rect(Rect2(edge + Vector2(dx, 8), Vector2(8, depth_px - 12 - i * 4)), face.darkened(0.32))
+		ci.draw_rect(Rect2(edge + Vector2(dx, 8), Vector2(4, 12)), face.darkened(0.16))
 
 
 func _detail_neighbors(x: int, y: int, tiles: String) -> int:
@@ -838,7 +858,7 @@ func _detail_neighbors(x: int, y: int, tiles: String) -> int:
 func _draw_detail_tile(ci: CanvasItem, origin: Vector2, cell: Vector2i) -> void:
 	var size_px := Vector2(DETAIL_CELL, DETAIL_CELL)
 	var src := Rect2(Vector2(cell) * size_px, size_px)
-	ci.draw_texture_rect_region(grass_detail, Rect2(origin, Vector2(TS, TS)), src)
+	ci.draw_texture_rect_region(field_detail, Rect2(origin, Vector2(TS, TS)), src)
 
 
 func _is_wide_bridge_south(x: int, y: int) -> bool:
@@ -854,7 +874,7 @@ func _detail_bridge_cell(x: int, y: int, south: bool) -> Vector2i:
 
 
 func _draw_detail_ground(ci: CanvasItem, c: String, x: int, y: int) -> bool:
-	if grass_detail == null:
+	if field_detail == null:
 		return false
 	var cell: Vector2i
 	var mark := absi(x * 37 + y * 19 + x * y * 11)
@@ -889,7 +909,7 @@ func _draw_detail_tree(ci: CanvasItem, x: int, y: int) -> void:
 	var variant := absi(x * 17 + y * 11 + x * y * 3) % 4
 	var src := Rect2(variant * DETAIL_CELL, 5 * DETAIL_CELL, DETAIL_CELL, DETAIL_CELL * 2)
 	var dst := Rect2(x * TS, (y - 1) * TS, TS, TS * 2)
-	ci.draw_texture_rect_region(grass_detail, dst, src)
+	ci.draw_texture_rect_region(field_detail, dst, src)
 
 
 func _draw_world(ci: CanvasItem) -> void:
@@ -939,9 +959,9 @@ func _draw_world(ci: CanvasItem) -> void:
 		match it[1]:
 			0:
 				var pos: Vector2i = it[2]
-				if grass_detail != null and it[3] == "T":
+				if field_detail != null and it[3] == "T":
 					_draw_detail_tree(ci, pos.x, pos.y)
-				elif grass_detail != null and it[3] == "o":
+				elif field_detail != null and it[3] == "o":
 					_draw_detail_tile(ci, Vector2(pos) * TS, Vector2i(4, 12))
 				else:
 					FieldArt.draw_tall(ci, ftheme, it[3], pos.x, pos.y, t)
@@ -1073,8 +1093,9 @@ func _draw_hud(ci: Control) -> void:
 	var pp := mo + ppos / TS * mk
 	ci.draw_circle(pp, 3.5 + sin(t * 6.0), Color(1.0, 0.3, 0.3))
 	# 操作
-	var help := "%s 移動　%s 調べる　%s ダッシュ　%s メニュー" % [Game.key("dir") if not Game.pad_mode else Game.key("move"), Game.key("accept"), Game.key("guard"), Game.key("menu")]
-	ci.draw_string(UI.FONT, Vector2(1280 - 16 - UI.FONT.get_string_size(help, HORIZONTAL_ALIGNMENT_LEFT, -1, 15).x, 708), help, HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color(1, 1, 1, 0.75))
+	if not Game.touch_mode:
+		var help := "%s 移動　%s 調べる　%s ダッシュ　%s メニュー" % [Game.key("dir") if not Game.pad_mode else Game.key("move"), Game.key("accept"), Game.key("guard"), Game.key("menu")]
+		ci.draw_string(UI.FONT, Vector2(1280 - 16 - UI.FONT.get_string_size(help, HORIZONTAL_ALIGNMENT_LEFT, -1, 15).x, 708), help, HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color(1, 1, 1, 0.75))
 	if flash > 0.0:
 		ci.draw_rect(Rect2(0, 0, 1280, 720), Color(1, 1, 1, flash * 0.8))
 # スキットが見られるときは、右パネルの空いた所に目立つ呼び出しを出す
@@ -1093,7 +1114,8 @@ func _update_skit_btn() -> void:
 	b.add_theme_stylebox_override("hover", hover)
 	b.add_theme_stylebox_override("pressed", hover)
 	b.add_theme_stylebox_override("focus", hover)
-	b.position = Vector2(916, 576)
+	# タッチ操作のときは右下にボタンが並ぶので、ミニマップの下へ
+	b.position = Vector2(916, 176) if Game.touch_mode else Vector2(916, 576)
 	b.custom_minimum_size = Vector2(350, 112)
 	b.pressed.connect(func() -> void:
 		Sfx.play("confirm")

@@ -2,6 +2,8 @@
 # 最後にレンとナインの場面、玉座のポッツの天気予報、雲の上の塔と太陽を映して暗転する。
 extends Control
 
+@onready var credits_art: Texture2D = UI.art("credits.png")
+@onready var final_art: Texture2D = UI.art("ending.png")
 var t := 0.0
 var roll: VBoxContainer
 var speed := 38.0
@@ -72,6 +74,10 @@ func _draw() -> void:
 	if final_t >= 0.0:
 		_draw_final()
 		return
+	if credits_art:
+		draw_texture_rect(credits_art, Rect2(0, 0, 1280, 720), false)
+		draw_rect(Rect2(0, 0, 1280, 720), Color(0.03, 0.03, 0.08, 0.38))
+		return
 	for i in range(24):
 		draw_rect(Rect2(0, i * 30, 1280, 31), Color(0.25, 0.35, 0.65).lerp(Color(0.95, 0.8, 0.75), i / 23.0))
 	for i in range(8):
@@ -82,6 +88,10 @@ func _draw() -> void:
 
 func _draw_final() -> void:
 	var ft := final_t
+	if final_art:
+		draw_texture_rect(final_art, Rect2(0, 0, 1280, 720), false)
+		_draw_final_fade(ft)
+		return
 	# 空（上は濃い青、地平は金色）
 	for i in range(24):
 		draw_rect(Rect2(0, i * 30, 1280, 31), Color(0.12, 0.28, 0.62).lerp(Color(1.0, 0.86, 0.6), i / 23.0))
@@ -113,7 +123,10 @@ func _draw_final() -> void:
 		var x := fmod(i * 120.0 + ft * (10 + i % 3 * 4), 1480.0) - 100
 		draw_circle(Vector2(x, 560 + (i % 3) * 26), 80, Color(1, 1, 1, 0.85))
 	draw_rect(Rect2(0, 600, 1280, 120), Color(1, 1, 1, 0.9))
-	# 暗転
+	_draw_final_fade(ft)
+
+
+func _draw_final_fade(ft: float) -> void:
 	var fade := clampf((ft - 4.5) / 2.0, 0.0, 1.0)
 	if ft < 1.0:
 		fade = 1.0 - ft

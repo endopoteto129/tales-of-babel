@@ -104,7 +104,7 @@ func _draw() -> void:
 	_draw_ovl_gauges()
 	_draw_finish_prompt()
 	_draw_buffs()
-	if battle.started and not battle.ended:
+	if battle.started and not battle.ended and not Game.touch_mode:
 		var hint = "J:攻撃  K(+↑↓→):術技  Space:ジャンプ  L:ガード  Tab:ターゲット  U:共鳴秘技  I:オーバーリミッツ  Esc:メニュー"
 		if Game.pad_mode:
 			hint = "X:攻撃  B(+方向):術技  A:ジャンプ  LB/LT:ガード  RB:ターゲット  RT:共鳴秘技  Y:オーバーリミッツ  右スティック:仲間に指示  START:メニュー"
@@ -177,8 +177,13 @@ func _draw_enemies() -> void:
 			UI.bar(self, Rect2(16, 42, 200, 8), tg.hp_ratio(), Color(1.0, 0.35, 0.3))
 
 
+# タッチ操作のときは右下にボタンが並ぶので、絆とOVLのゲージを上へ逃がす
+func _gauge_dy() -> float:
+	return -420.0 if Game.touch_mode else 0.0
+
+
 func _draw_link() -> void:
-	var p = Vector2(1080, 560)
+	var p = Vector2(1080, 560 + _gauge_dy())
 	var r = 34.0
 	var k: float = battle.link / 100.0
 	draw_circle(p, r + 6, Color(0, 0, 0, 0.6))
@@ -210,7 +215,7 @@ func _draw_ovl_gauges() -> void:
 	var w = 136.0
 	var pulse = 0.6 + sin(t * 8.0) * 0.4
 	# オーバーリミッツ
-	var oy = 516.0
+	var oy = 516.0 + _gauge_dy()
 	draw_rect(Rect2(x - 6, oy - 22, w + 12, 108), Color(0, 0, 0, 0.55))
 	if battle.ovl_t > 0.0:
 		draw_string(UI.FONT_BOLD, Vector2(x, oy - 4), "OVER LIMIT", HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color(1.0, 0.85, 0.35, pulse))
@@ -221,7 +226,7 @@ func _draw_ovl_gauges() -> void:
 		draw_string(UI.FONT_BOLD, Vector2(x, oy - 4), lbl, HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color(1.0, 0.85, 0.4, pulse) if full else Color(0.9, 0.85, 0.7))
 		UI.bar(self, Rect2(x, oy + 2, w, 9), battle.ovl / 100.0, Color(1.0, 0.75, 0.3) if full else Color(0.8, 0.65, 0.35))
 	# 秘奥義（100%ごとに区切った3段のゲージ）
-	var my = 552.0
+	var my = 552.0 + _gauge_dy()
 	var g: float = battle.mystic_gauge()
 	var ready = battle.ovl_t > 0.0 and g >= 100.0
 	var lbl2 = "秘奥義 %d%%" % int(g)
@@ -500,13 +505,25 @@ func play_mystic_cutin(md: Dictionary) -> void:
 		edge.color = col.lightened(0.4)
 		edge.size = Vector2(1500, 5)
 		band.add_child(edge)
-		var por = Portrait.new()
-		por.size = Vector2(band_h * 1.15, band_h * 1.6)
-		por.position = Vector2(150 if from_left else 1050, band_h - band_h * 1.6 + 30)
-		por.setup(cid, "serious" if cid != "nine" else "smile", not from_left)
-		band.add_child(por)
+		var art := UI.art("mystic_%s.png" % cid)
+		if art:
+			var plate := TextureRect.new()
+			plate.texture = art
+			plate.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+			plate.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+			plate.flip_h = not from_left
+			plate.size = band.size
+			plate.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			band.add_child(plate)
+			band.move_child(plate, 0)
+		else:
+			var por = Portrait.new()
+			por.size = Vector2(band_h * 1.15, band_h * 1.6)
+			por.position = Vector2(150 if from_left else 1050, band_h - band_h * 1.6 + 30)
+			por.setup(cid, "serious" if cid != "nine" else "smile", not from_left)
+			band.add_child(por)
 		var l = UI.outlined(UI.label(lines.get(cid, ""), 32, Color.WHITE, true), 7)
-		l.position = Vector2(460 if from_left else 260, band_h / 2.0 - 26)
+		l.position = Vector2(650 if art and from_left else (460 if from_left else 260), band_h / 2.0 - 26)
 		band.add_child(l)
 		var tw = create_tween()
 		tw.tween_property(band, "position:x", -110.0, 0.22).set_trans(Tween.TRANS_QUART).set_ease(Tween.EASE_OUT)
@@ -604,7 +621,7 @@ func show_results(r: Dictionary) -> void:
 		var l = UI.label("%s は Lv%d になった！ (SP+1)" % [DB.cname(u["id"]), u["level"]], 20, UI.C_GOLD, true)
 		v.add_child(l)
 	var hint = UI.label("", 16, UI.C_DIM)
-	UI.live_text(hint, func() -> String: return Game.btn("accept") + " で進む")
+	UI.live_text(hint, func() -> String: return "タップで進む" if Game.touch_mode else Game.btn("accept") + " で進む")
 	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	v.add_child(hint)
 	results.modulate.a = 0.0
@@ -614,7 +631,8 @@ func show_results(r: Dictionary) -> void:
 
 func _unhandled_input(event: InputEvent) -> void:
 	if results and is_instance_valid(results) and results.modulate.a >= 0.99:
-		if event.is_action_pressed("ui_accept") or event.is_action_pressed("attack"):
+		var tap: bool = event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT
+		if event.is_action_pressed("ui_accept") or event.is_action_pressed("attack") or tap:
 			get_viewport().set_input_as_handled()
 			Sfx.play("confirm")
 			results.modulate.a = 0.5

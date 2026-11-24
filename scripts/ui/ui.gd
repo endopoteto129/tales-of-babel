@@ -2,6 +2,16 @@
 class_name UI
 extends RefCounted
 
+static var _art_cache: Dictionary = {}
+
+
+static func art(file: String) -> Texture2D:
+	if not _art_cache.has(file):
+		var path := "res://assets/illustrations/" + file
+		_art_cache[file] = load(path) as Texture2D if ResourceLoader.exists(path) else null
+	return _art_cache[file]
+
+
 const FONT := preload("res://assets/fonts/NotoSansJP-Regular.ttf")
 const FONT_BOLD := preload("res://assets/fonts/NotoSansJP-Bold.ttf")
 
@@ -134,13 +144,17 @@ static func bar(parent: Control, rect: Rect2, ratio: float, fg: Color, bg: Color
 
 
 static func focus_first(container: Node) -> void:
+	# 作り直した直後の画面では、消える予定の古いボタンが残っている。そこへカーソルを置くと
+	# 次のフレームでカーソルが消え、コントローラーで操作できなくなるので飛ばす
 	for c in container.get_children():
+		if c.is_queued_for_deletion():
+			continue
 		if c is Button and not c.disabled:
 			c.grab_focus.call_deferred()
 			return
 		if c is Container:
 			for cc in c.get_children():
-				if cc is Button and not cc.disabled:
+				if cc is Button and not cc.disabled and not cc.is_queued_for_deletion():
 					cc.grab_focus.call_deferred()
 					return
 

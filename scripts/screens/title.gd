@@ -6,6 +6,8 @@ var t := 0.0
 var menu: VBoxContainer
 var stars: Array = []
 var help: Control
+@onready var backdrop: Texture2D = UI.art("title.png")
+@onready var logo: Texture2D = UI.art("logo.png")
 
 
 func _ready() -> void:
@@ -16,11 +18,13 @@ func _ready() -> void:
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.position = Vector2(0, 120)
 	title.size = Vector2(1280, 90)
+	title.visible = logo == null
 	add_child(title)
 	var sub = UI.outlined(UI.label("TALES  OF  BABEL", 28, Color(1.0, 0.75, 0.4)), 6)
 	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	sub.position = Vector2(0, 208)
 	sub.size = Vector2(1280, 40)
+	sub.visible = logo == null
 	add_child(sub)
 	var tag = UI.outlined(UI.label("― 絶対なんてない。それでも、君と昇る ―", 20, Color(0.85, 0.85, 0.95)), 4)
 	tag.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -61,6 +65,16 @@ func _process(delta: float) -> void:
 
 
 func _draw() -> void:
+	if backdrop:
+		draw_texture_rect(backdrop, Rect2(0, 0, 1280, 720), false)
+		draw_rect(Rect2(0, 0, 1280, 720), Color(0.02, 0.02, 0.07, 0.29))
+	else:
+		_draw_original_sky()
+	if logo:
+		draw_texture_rect(logo, Rect2(269, 97, 742, 152), false)
+
+
+func _draw_original_sky() -> void:
 	for i in range(24):
 		draw_rect(Rect2(0, i * 30, 1280, 31), Color(0.03, 0.03, 0.09).lerp(Color(0.2, 0.12, 0.25), i / 23.0))
 	for s in stars:

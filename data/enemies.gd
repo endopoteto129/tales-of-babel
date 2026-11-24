@@ -133,7 +133,7 @@ const DATA := {
 			{"name": "爪撃", "range": 170, "windup": 0.7, "active": 0.2, "recovery": 0.8, "power": 1.4, "reach": 170, "height": 110, "knock": 300, "cooldown": 1.8},
 			{"name": "突進", "range": 900, "windup": 1.0, "active": 0.7, "recovery": 1.0, "power": 1.5, "reach": 120, "height": 120, "knock": 380, "dash": 520, "cooldown": 4.5},
 			{"name": "大咆哮", "range": 900, "windup": 1.4, "active": 0.2, "recovery": 1.2, "power": 1.2,
-				"aoe": {"w": 1400, "h": 50, "delay": 0.0, "hits": 1, "interval": 0.1, "shape": "quake", "at_self": true}, "cooldown": 7.0, "phase": 1, "warn": "跳んで避けろ！"},
+				"aoe": {"art": "boss_beast_roar", "w": 1400, "h": 50, "delay": 0.0, "hits": 1, "interval": 0.1, "shape": "quake", "at_self": true}, "cooldown": 7.0, "phase": 1, "warn": "跳んで避けろ！"},
 		],
 	},
 	"boss_siren": {
@@ -146,7 +146,7 @@ const DATA := {
 			{"name": "水泡弾", "range": 900, "windup": 0.7, "active": 0.1, "recovery": 0.6, "power": 0.9, "magic": true,
 				"projectile": {"speed": 300, "w": 30, "h": 30, "life": 3.2, "shape": "orb", "count": 4, "interval": 0.2, "homing": true}, "cooldown": 3.2},
 			{"name": "滅びの旋律", "range": 900, "windup": 2.0, "active": 0.2, "recovery": 1.5, "power": 2.0, "magic": true,
-				"aoe": {"w": 1400, "h": 400, "delay": 0.0, "hits": 1, "interval": 0.1, "shape": "wave", "at_self": true}, "cooldown": 12.0, "phase": 1, "warn": "ガードで耐えろ！", "guardable": true},
+				"aoe": {"art": "boss_siren_song", "w": 1400, "h": 400, "delay": 0.0, "hits": 1, "interval": 0.1, "shape": "wave", "at_self": true}, "cooldown": 12.0, "phase": 1, "warn": "ガードで耐えろ！", "guardable": true},
 		],
 	},
 	"boss_oni": {
@@ -158,7 +158,7 @@ const DATA := {
 			{"name": "竹槍の雨", "range": 900, "windup": 1.0, "active": 0.1, "recovery": 0.8, "power": 0.9,
 				"aoe": {"w": 140, "h": 220, "delay": 0.6, "hits": 3, "interval": 0.12, "shape": "spikes"}, "cooldown": 3.0},
 			{"name": "月落とし", "range": 900, "windup": 1.5, "active": 0.2, "recovery": 1.2, "power": 1.5,
-				"aoe": {"w": 1400, "h": 50, "delay": 0.0, "hits": 1, "interval": 0.1, "shape": "quake", "at_self": true}, "cooldown": 7.0, "phase": 1, "warn": "跳んで避けろ！"},
+				"aoe": {"art": "boss_oni_moon", "w": 1400, "h": 50, "delay": 0.0, "hits": 1, "interval": 0.1, "shape": "quake", "at_self": true}, "cooldown": 7.0, "phase": 1, "warn": "跳んで避けろ！"},
 		],
 	},
 	"boss_nene": {
@@ -171,7 +171,7 @@ const DATA := {
 			{"name": "呪いの言の葉", "range": 900, "windup": 1.0, "active": 0.1, "recovery": 0.8, "power": 0.8, "magic": true,
 				"projectile": {"speed": 360, "w": 28, "h": 28, "life": 3.0, "shape": "orb", "count": 5, "interval": 0.15, "homing": true}, "cooldown": 3.4},
 			{"name": "嘘つきへの罰", "range": 900, "windup": 2.0, "active": 0.2, "recovery": 1.4, "power": 2.0, "magic": true,
-				"aoe": {"w": 1400, "h": 400, "delay": 0.0, "hits": 1, "interval": 0.1, "shape": "wave", "at_self": true}, "cooldown": 12.0, "phase": 1, "warn": "ガードで耐えろ！", "guardable": true},
+				"aoe": {"art": "boss_nene_curse", "w": 1400, "h": 400, "delay": 0.0, "hits": 1, "interval": 0.1, "shape": "wave", "at_self": true}, "cooldown": 12.0, "phase": 1, "warn": "ガードで耐えろ！", "guardable": true},
 		],
 	},
 	"boss_val": {
@@ -186,7 +186,7 @@ const DATA := {
 			{"name": "エクスプロード", "range": 900, "windup": 1.2, "active": 0.1, "recovery": 0.8, "power": 1.4, "magic": true, "element": "fire",
 				"aoe": {"w": 240, "h": 180, "delay": 0.7, "hits": 2, "interval": 0.2, "shape": "burst"}, "cooldown": 4.0},
 			{"name": "大義の裁き", "range": 900, "windup": 2.4, "active": 0.2, "recovery": 1.6, "power": 1.0, "magic": true,
-				"aoe": {"w": 1400, "h": 500, "delay": 0.0, "hits": 4, "interval": 0.25, "shape": "meteor", "at_self": true}, "cooldown": 13.0, "phase": 1, "warn": "ガードで耐えろ！", "guardable": true},
+				"aoe": {"art": "boss_val_verdict", "w": 1400, "h": 500, "delay": 0.0, "hits": 4, "interval": 0.25, "shape": "meteor", "at_self": true}, "cooldown": 13.0, "phase": 1, "warn": "ガードで耐えろ！", "guardable": true},
 		],
 	},
 	"boss_zone": {
@@ -200,7 +200,7 @@ const DATA := {
 				"aoe": {"w": 120, "h": 100, "delay": 1.0, "hits": 1, "interval": 0.1, "shape": "burst"}, "cooldown": 3.2},
 			{"name": "近接制圧", "range": 120, "windup": 0.4, "active": 0.2, "recovery": 0.5, "power": 1.3, "reach": 100, "height": 90, "knock": 300, "cooldown": 1.6},
 			{"name": "包囲殲滅", "range": 900, "windup": 1.6, "active": 0.2, "recovery": 1.2, "power": 1.5,
-				"aoe": {"w": 1400, "h": 50, "delay": 0.0, "hits": 1, "interval": 0.1, "shape": "quake", "at_self": true}, "cooldown": 7.0, "phase": 1, "warn": "跳んで避けろ！"},
+				"aoe": {"art": "boss_zone_barrage", "w": 1400, "h": 50, "delay": 0.0, "hits": 1, "interval": 0.1, "shape": "quake", "at_self": true}, "cooldown": 7.0, "phase": 1, "warn": "跳んで避けろ！"},
 		],
 	},
 	"boss_shasta": {
@@ -212,9 +212,9 @@ const DATA := {
 			{"name": "勅命の雷", "range": 900, "windup": 1.0, "active": 0.1, "recovery": 0.7, "power": 0.9, "magic": true, "element": "thunder",
 				"aoe": {"w": 140, "h": 300, "delay": 0.5, "hits": 3, "interval": 0.12, "shape": "pillar"}, "cooldown": 2.2},
 			{"name": "王権の鎖", "range": 900, "windup": 1.4, "active": 0.2, "recovery": 1.0, "power": 1.4,
-				"aoe": {"w": 1400, "h": 50, "delay": 0.0, "hits": 1, "interval": 0.1, "shape": "quake", "at_self": true}, "cooldown": 6.5, "phase": 1, "warn": "跳んで避けろ！"},
+				"aoe": {"art": "boss_shasta_chain", "w": 1400, "h": 50, "delay": 0.0, "hits": 1, "interval": 0.1, "shape": "quake", "at_self": true}, "cooldown": 6.5, "phase": 1, "warn": "跳んで避けろ！"},
 			{"name": "神罰の光", "range": 900, "windup": 2.4, "active": 0.2, "recovery": 1.4, "power": 2.2, "magic": true,
-				"aoe": {"w": 1400, "h": 500, "delay": 0.0, "hits": 1, "interval": 0.1, "shape": "wave", "at_self": true}, "cooldown": 14.0, "phase": 2, "warn": "ガードで耐えろ！", "guardable": true},
+				"aoe": {"art": "boss_shasta_light", "w": 1400, "h": 500, "delay": 0.0, "hits": 1, "interval": 0.1, "shape": "wave", "at_self": true}, "cooldown": 14.0, "phase": 2, "warn": "ガードで耐えろ！", "guardable": true},
 		],
 	},
 }

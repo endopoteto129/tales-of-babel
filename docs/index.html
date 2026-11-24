@@ -92,7 +92,24 @@ body {
 		</style>
 		<link id="-gd-engine-icon" rel="icon" type="image/png" href="index.icon.png" />
 <link rel="apple-touch-icon" href="index.apple-touch-icon.png"/>
-
+<style>
+#tob-rotate{display:none;position:fixed;inset:0;z-index:9999;background:#0d0d14;color:#f0e6c8;font-family:sans-serif;text-align:center;align-items:center;justify-content:center;flex-direction:column;font-size:20px;line-height:1.8}
+#tob-rotate .ico{font-size:56px}
+@media (orientation:portrait) and (pointer:coarse){#tob-rotate{display:flex}}
+html,body,canvas{touch-action:none;-webkit-user-select:none;user-select:none;overscroll-behavior:none}
+</style>
+<script>
+document.addEventListener('DOMContentLoaded',function(){
+var d=document.createElement('div');d.id='tob-rotate';
+d.innerHTML='<div class="ico">&#x1F4F1;&#x21BB;</div><div>スマホを横向きにしてください</div><div style="font-size:14px;opacity:.7">画面をタップすると全画面で遊べます</div>';
+document.body.appendChild(d);
+var tried=false;
+function full(){if(tried)return;tried=true;var el=document.documentElement;
+try{var p=(el.requestFullscreen||el.webkitRequestFullscreen||function(){}).call(el);
+if(p&&p.then){p.then(function(){if(screen.orientation&&screen.orientation.lock){screen.orientation.lock('landscape').catch(function(){});}}).catch(function(){});}}catch(e){}}
+if(window.matchMedia('(pointer:coarse)').matches){document.addEventListener('touchend',full,{once:false,passive:true});}
+});
+</script>
 	</head>
 	<body>
 		<canvas id="canvas">
@@ -111,7 +128,7 @@ body {
 
 		<script src="index.js"></script>
 		<script>
-const GODOT_CONFIG = {"args":[],"canvasResizePolicy":2,"emscriptenPoolSize":8,"ensureCrossOriginIsolationHeaders":true,"executable":"index","experimentalVK":false,"fileSizes":{"index.pck":21172624,"index.wasm":38034280},"focusCanvas":true,"gdextensionLibs":[],"godotPoolSize":4};
+const GODOT_CONFIG = {"args":[],"canvasResizePolicy":2,"emscriptenPoolSize":8,"ensureCrossOriginIsolationHeaders":true,"executable":"index","experimentalVK":false,"fileSizes":{"index.pck":23136620,"index.wasm":38034280},"focusCanvas":true,"gdextensionLibs":[],"godotPoolSize":4};
 const GODOT_THREADS_ENABLED = false;
 const engine = new Engine(GODOT_CONFIG);
 

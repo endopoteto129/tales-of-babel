@@ -111,89 +111,6 @@ POSES = (
 )
 
 
-def staff(d, hand, tip):
-    hx,hy = hand
-    tx,ty = tip
-    end = (max(1,min(46,round(hx+(hx-tx)*.52))),max(1,min(46,round(hy+(hy-ty)*.52))))
-    d.line((end,tip), INK, 3)
-    d.line((end,tip), "#8a644c")
-    d.ellipse((tx-2,ty-2,tx+2,ty+2), INK)
-    d.ellipse((tx-1,ty-1,tx+1,ty+1), "#a4485b")
-    d.point((tx,ty-1), "#e7837b")
-
-
-def angie_frame(row, frame):
-    canvas = new(48,48)
-    d = ImageDraw.Draw(canvas)
-    hair, hair_light, cloth, cloth_light, red, red_light = PALETTES["angie"]
-    shift, bob, lean, back, front, hx, hy, tx, ty = POSES[row][frame]
-    x, y = 23+shift, 32+bob
-    if row == 10 and frame < 2:
-        polygon(d,INK,(5,46),(9,42),(17,41),(24,41),(28,40),(34,36+frame*3),
-                (39,38+frame*2),(43,43),(41,47),(7,47))
-        polygon(d,cloth,(8,45),(12,42),(22,42),(28,41),(32,45),(27,46),(10,46))
-        d.line((16,44,27,43), red)
-        d.ellipse((29,38+frame*2,40,46), hair)
-        d.line((31,42+frame,36,41+frame), hair_light)
-        d.point((39,44), SKIN)
-        d.line((17,47,44,47), "#8a644c")
-        return canvas
-    def p(color,*pts):
-        polygon(d,color,*((x+a,y+b) for a,b in pts))
-    for i,step in enumerate((back,front)):
-        fx = 23+step
-        lift = (0, 0, 2, 3, 2, 0)[(frame+3*i)%6] if row == 1 else (3 if row == 2 and i == 0 else 0)
-        fy = 47-lift
-        d.line(((x+(-3 if i==0 else 3),y+4),(fx,fy-2)), INK, 5)
-        d.line(((x+(-3 if i==0 else 3),y+4),(fx,fy-2)), cloth_light if i else cloth, 3)
-        polygon(d,INK,(fx-2,fy-4),(fx+1,fy-4),(fx+4,fy-1),(fx+4,fy),(fx-3,fy))
-        d.line((fx-1,fy-1,fx+3,fy-1),"#6e554e")
-    flow = 4 if row in (1,4,5,6,7) else 1
-    p(INK,(lean-7,-17),(lean-6,-23),(lean+1,-26),(lean+7,-22),(lean+7,-15),
-      (3,-6),(-2,5),(-8-flow,8),(-10-flow,4),(-9-flow,-5))
-    p(hair,(lean-6,-17),(lean-5,-22),(lean+1,-25),(lean+5,-21),(lean+6,-15),
-      (2,-6),(-3,4),(-8-flow,7),(-9-flow,4),(-8-flow,-5))
-    p(hair_light,(lean-5,-19),(lean-3,-22),(lean+1,-23),(lean-1,-19),
-      (-4,-11),(-5-flow,-4),(-7-flow,3),(-8-flow,3))
-    hem = min(12,46-y)
-    p(INK,(lean-5,-15),(lean+4,-15),(8,-10),(8,-5),(6,1),(10,hem),
-      (5,hem+1),(-4,hem+1),(-9-flow,hem),(-6,3),(-8,-4),(-7,-11))
-    p(cloth,(lean-4,-14),(lean+3,-14),(7,-10),(7,-5),(5,1),(9,hem-1),
-      (5,hem),(-4,hem),(-8-flow,hem-1),(-5,3),(-7,-4),(-6,-10))
-    p(cloth_light,(-5,-8),(-1,-9),(1,-5),(-1,0),(-2,5),(-5,hem),(-7-flow,hem-1),(-4,5))
-    p("#483946",(3,1),(5,2),(8,hem-1),(5,hem),(1,hem),(3,6))
-    p(red,(lean-5,-14),(lean+3,-14),(5,-11),(3,-9),(0,-10),(-5,-11))
-    p(red,(-6,-1),(5,-1),(6,1),(3,3),(-6,2))
-    p("#7d343c",(4,1),(6,2),(7,8),(5,9),(3,7))
-    p(red_light,(-4,0),(3,0),(4,1),(-2,1))
-    p(hair,(lean-7,-16),(lean-6,-22),(lean-2,-25),(lean+3,-25),(lean+6,-22),
-      (lean+7,-18),(lean+3,-15),(lean, -14),(lean-5,-14))
-    p(SKIN_DARK,(lean-2,-22),(lean+4,-22),(lean+6,-18),(lean+8,-16),(lean+6,-15),
-      (lean+5,-12),(lean+1,-12),(lean-3,-15))
-    p(SKIN,(lean,-21),(lean+4,-21),(lean+5,-18),(lean+7,-16),(lean+5,-15),
-      (lean+5,-13),(lean+1,-13),(lean-2,-16))
-    p(hair,(lean-5,-22),(lean-1,-24),(lean+3,-24),(lean+5,-22),(lean+5,-20),
-      (lean+3,-21),(lean+1,-18),(lean-1,-19),(lean-3,-15),(lean-5,-16))
-    p(hair_light,(lean-4,-21),(lean-1,-23),(lean+2,-23),(lean-1,-21),(lean-2,-19))
-    d.line((x+lean+4,y-18,x+lean+5,y-18), "#674269")
-    d.point((x+lean+5,y-17),"#925482")
-    hand = (x+hx,y+hy)
-    elbow = (round((x+lean+hand[0])/2)+1,round((y-9+hand[1])/2)+3)
-    arm = ((x+lean+1,y-9),elbow,hand)
-    d.line(arm, INK, 7)
-    d.line(arm, cloth, 5)
-    d.line((arm[0],elbow),cloth_light,2)
-    d.line((elbow,hand), "#534553", 2)
-    staff(d, hand, (min(45,23+tx),max(2,32+ty)))
-    d.rectangle((hand[0]-1,hand[1]-1,hand[0]+1,hand[1]+1), SKIN_DARK)
-    d.point(hand, SKIN)
-    if row in (4,5,6,7) and frame == (3 if row==7 else 2):
-        # 杖の先端が走る方向を示す短い軌跡。魔法の色はゲーム側のまま。
-        d.line([(40,11),(44,16),(46,23),(45,28)], "#c9959e")
-        d.point((45,17), "#ebc7cb")
-    return canvas
-
-
 def nine_frame(cheer, f):
     canvas = new(32,32)
     d=ImageDraw.Draw(canvas)
@@ -251,11 +168,13 @@ def save(root, rel, image):
 
 
 def main():
+    from party_battle_pixel import hero_frame
+
     root=Path(sys.argv[1]).resolve()
     for cid in PALETTES:
         save(root, f"field/chara_{cid}.png",
              atlas([walker(cid,d,g) for d in range(4) for g in (-1,0,1)],3))
-    save(root,"battle/angie.png",atlas([angie_frame(r,f) if f < count else new(48,48)
+    save(root,"battle/angie.png",atlas([hero_frame("angie", r, f) if f < count else new(48,48)
                                       for r,count in enumerate(HERO_COUNTS) for f in range(8)],8))
     save(root,"battle/nine.png",atlas([nine_frame(r,f) if f<4 else new(32,32)
                                      for r in range(2) for f in range(8)],8))

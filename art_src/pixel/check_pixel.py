@@ -31,6 +31,7 @@ SPEC["field/obj_campfire.png"] = (64, 16)
 SPEC["field/obj_event.png"] = (64, 16)
 for h in ["ren", "angie", "sona", "jin", "john"]:
     SPEC[f"battle/{h}.png"] = (384, 576)
+SPEC["battle/ren_cape.png"] = ((384, 576), "optional")
 SPEC["battle/nine.png"] = (256, 64)
 SPEC["battle/pots.png"] = (96, 24)
 CELL = {"golem": 48, "soldier": 48, "gunner": 48, "mage_soldier": 48,
@@ -46,6 +47,11 @@ for k, s in [("wave", 16), ("orb", 12), ("bullet", 8), ("lance", 24), ("rock", 1
     SPEC[f"fx/proj_{k}.png"] = ("strip", s, s, 1, 8)
 for k in ["pillar", "burst", "spikes", "storm", "quake", "wave", "meteor"]:
     SPEC[f"fx/aoe_{k}.png"] = ("strip", 32, 32, 2, 12)
+
+for k in ("beast_roar", "siren_song", "oni_moon", "nene_curse", "val_verdict",
+          "zone_barrage", "shasta_chain", "shasta_light"):
+    SPEC[f"fx/boss_{k}.png"] = (640, 80)
+
 
 def check(path, rule):
     im = Image.open(path)
