@@ -61,6 +61,9 @@ func _ready() -> void:
 	if "--fieldtest" in args:
 		add_child(load("res://scripts/fieldtest.gd").new())
 		return
+	if "--ovltest" in args:
+		add_child(load("res://scripts/ovltest.gd").new())
+		return
 	if "--touchtest" in args:
 		add_child(load("res://scripts/touchtest.gd").new())
 		return

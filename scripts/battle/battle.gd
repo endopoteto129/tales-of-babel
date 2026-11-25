@@ -4,7 +4,7 @@ extends Node2D
 const LEFT := 40.0
 const RIGHT := 1240.0
 const GROUND_Y := 600.0
-# 2.5D（試作）：奥行き z を持たせる。z が大きいほど奥（画面の上・小さく描く）
+# 2.5D：奥行き z を持たせる。z が大きいほど奥（画面の上・小さく描く）
 const Z_MAX := 130.0
 const Z_TO_Y := 0.75       # 奥行き1あたり、画面上で何ピクセル上にずらすか
 const DEPTH_HIT := 34.0    # この奥行き差までなら攻撃が当たる
@@ -207,7 +207,7 @@ func _tutorial(id: String) -> void:
 
 
 func _check_tutorials() -> void:
-	if link >= 100.0 and not Game.flags.get("tut_link", false):
+	if link >= 100.0 and link_unlocked() and not Game.flags.get("tut_link", false):
 		_tutorial("link")
 	elif ovl >= 100.0 and not Game.flags.get("tut_ovl", false):
 		_tutorial("ovl")
@@ -238,6 +238,7 @@ func _process(delta: float) -> void:
 			popup_text(player.head() + Vector2(0, -30), "オーバーリミッツ終了", Color(1.0, 0.85, 0.5), 18)
 	for f in fighters.duplicate():
 		f.tick(dt)
+	_check_ovl_event()
 	for p in projectiles.duplicate():
 		if is_instance_valid(p):
 			p.tick(dt)
@@ -530,7 +531,8 @@ func apply_hit(att: Fighter, tgt: Fighter, spec: Dictionary, power: float, range
 				popup_text(tgt.head() + Vector2(0, -40), "連携！", Color(1.0, 0.75, 0.9), 22)
 		last_hitter[tgt] = [att, time]
 		var before = link
-		link = min(100.0, link + gain)
+		if link_unlocked():
+			link = min(100.0, link + gain)
 		if before < 100.0 and link >= 100.0:
 			Sfx.play("link", 1.5, -6)
 			chat("link_ready", {})
@@ -801,8 +803,18 @@ func link_partner() -> String:
 	return cands[randi() % cands.size()]
 
 
+# 共鳴秘技は、第三層のボス戦のあと（アンジーの「まだ子供じゃない」の場面）で解放される
+func link_unlocked() -> bool:
+	return bool(Game.flags.get("link_unlocked", false))
+
+
+# オーバーリミッツは、第五層のボス戦の途中でポッツがOVLシステムを起動して解放される
+func ovl_unlocked() -> bool:
+	return bool(Game.flags.get("ovl_unlocked", false))
+
+
 func try_link() -> void:
-	if link < 100.0 or frozen or not player.alive() or ended:
+	if not link_unlocked() or link < 100.0 or frozen or not player.alive() or ended:
 		return
 	var partner = link_partner()
 	if partner == "":
@@ -853,7 +865,7 @@ func add_mystic(v: float) -> void:
 
 
 func add_ovl(v: float) -> void:
-	if ovl_t > 0.0 or ended:
+	if ovl_t > 0.0 or ended or not ovl_unlocked():
 		return
 	var before = ovl
 	ovl = min(100.0, ovl + v * Game.bmod("link_gain_mult"))
@@ -866,7 +878,7 @@ func add_ovl(v: float) -> void:
 
 
 func _press_overlimit() -> void:
-	if player == null or not player.alive():
+	if player == null or not player.alive() or not ovl_unlocked():
 		return
 	if ovl_t > 0.0:
 		if mystic_gauge() >= 100.0:
@@ -893,6 +905,47 @@ func start_ovl() -> void:
 	spawn_fx("break", player.center(), Color(1.0, 0.85, 0.4), 1.4)
 	hud.show_banner("OVER LIMIT!", Color(1.0, 0.85, 0.35))
 	chat("ovl", {})
+
+
+# 第五層のボス戦。ボスのHPが減ったところで、ポッツが禁じられていたOVLシステムを起動する（強制イベント）
+const OVL_EVENT_FLOOR := 5
+const OVL_EVENT_HP := 0.6
+var ovl_event_done := false
+
+
+func _check_ovl_event() -> void:
+	if ovl_event_done or kind != "boss" or ended or frozen or ovl_unlocked() or Game.floor_num != OVL_EVENT_FLOOR:
+		return
+	for e in enemies:
+		if e.data.get("boss", false) and e.alive() and e.hp <= e.max_hp * OVL_EVENT_HP:
+			_ovl_event()
+			return
+
+
+func _ovl_event() -> void:
+	ovl_event_done = true
+	paused = true
+	if is_instance_valid(chat_bubble):
+		chat_bubble.queue_free()
+	chat_queue.clear()
+	chat_t = 0.0
+	if not Game.is_test_run() and DB.Story.DATA.has("f5_ovl"):
+		var data: Dictionary = DB.Story.DATA["f5_ovl"].duplicate()
+		data["mode"] = "story"
+		data["bg"] = "none"
+		var d: Node = Main.inst.play_dialogue(data)
+		await d.finished
+		if not is_inside_tree():
+			return
+	Game.flags["ovl_unlocked"] = true
+	paused = false
+	for p in party:
+		if p.alive():
+			p.hp = min(p.max_hp, p.hp + p.max_hp * 0.3)
+	await _tutorial("ovl")
+	if not is_inside_tree() or ended:
+		return
+	start_ovl()
 
 
 func fire_mystic() -> void:
@@ -1160,9 +1213,12 @@ func _tick_cheer(dt: float) -> void:
 	cheer_t -= dt
 	if cheer_t <= 0.0:
 		cheer_t = randf_range(13.0, 20.0)
-		link = min(100.0, link + LINK_PER_CHEER * Game.bmod("link_gain_mult"))
 		companions.cheer()
-		popup_text(companions.nine_pos() + Vector2(0, -100), "応援！ 絆+", Color(1.0, 0.7, 0.4), 16)
+		if link_unlocked():
+			link = min(100.0, link + LINK_PER_CHEER * Game.bmod("link_gain_mult"))
+			popup_text(companions.nine_pos() + Vector2(0, -100), "応援！ 絆+", Color(1.0, 0.7, 0.4), 16)
+		else:
+			popup_text(companions.nine_pos() + Vector2(0, -100), "応援！", Color(1.0, 0.7, 0.4), 16)
 		if chat_t <= 0.0 and chat_queue.is_empty():
 			chat("cheer", {})
 

@@ -3,7 +3,7 @@ extends Node2D
 
 var deco := "grass"
 var boss := false
-var depth := false   # 2.5D（試作）のときは、奥行きのある地面を描く
+var depth := false   # 2.5D のときは、奥行きのある地面を描く
 var t := 0.0
 var rnd: Array = []
 var _background_tex: Texture2D

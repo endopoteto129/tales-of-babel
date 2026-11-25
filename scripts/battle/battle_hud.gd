@@ -105,9 +105,15 @@ func _draw() -> void:
 	_draw_finish_prompt()
 	_draw_buffs()
 	if battle.started and not battle.ended and not Game.touch_mode:
-		var hint = "J:攻撃  K(+↑↓→):術技  Space:ジャンプ  L:ガード  Tab:ターゲット  U:共鳴秘技  I:オーバーリミッツ  Esc:メニュー"
+		# 絆技・OVLは物語で解放されるまで出さない
+		var hint = "WASD:移動  J:攻撃  K(+方向):術技  Space:ジャンプ  L:ガード  O:回避  Tab:ターゲット"
 		if Game.pad_mode:
-			hint = "X:攻撃  B(+方向):術技  A:ジャンプ  LB/LT:ガード  RB:ターゲット  RT:共鳴秘技  Y:オーバーリミッツ  右スティック:仲間に指示  START:メニュー"
+			hint = "X:攻撃  B(+方向):術技  A:ジャンプ  LB:ガード  RT:回避  RB:ターゲット"
+		if battle.link_unlocked():
+			hint += "  LT:共鳴秘技" if Game.pad_mode else "  U:共鳴秘技"
+		if battle.ovl_unlocked():
+			hint += "  Y:オーバーリミッツ" if Game.pad_mode else "  I:オーバーリミッツ"
+		hint += "  右スティック:仲間に指示  START:メニュー" if Game.pad_mode else "  Esc:メニュー"
 		draw_string(UI.FONT, Vector2(12, 612), hint, HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color(1, 1, 1, 0.55))
 
 
@@ -183,6 +189,8 @@ func _gauge_dy() -> float:
 
 
 func _draw_link() -> void:
+	if not battle.link_unlocked():
+		return
 	var p = Vector2(1080, 560 + _gauge_dy())
 	var r = 34.0
 	var k: float = battle.link / 100.0
@@ -211,6 +219,8 @@ func _draw_ovl_frame() -> void:
 
 # 絆ゲージの右にオーバーリミッツと秘奥義のゲージ
 func _draw_ovl_gauges() -> void:
+	if not battle.ovl_unlocked():
+		return
 	var x = 1132.0
 	var w = 136.0
 	var pulse = 0.6 + sin(t * 8.0) * 0.4

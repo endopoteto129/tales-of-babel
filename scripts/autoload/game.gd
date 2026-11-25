@@ -26,7 +26,7 @@ var play_time := 0.0
 
 var rng := RandomNumberGenerator.new()
 const SETTINGS_PATH := "user://settings.cfg"
-var battle_25d := false  # バトルを 2.5D（奥行きあり・試作）にする。セーブとは別に覚えておく
+var battle_25d := true  # バトルは 2.5D（奥行きあり）が正式仕様。--2d を付けて起動したときだけ従来の 2D で比較できる
 var pad_mode := false  # 最後の入力がゲームパッドなら true（ボタン表示を切り替える）
 var touch_mode := false  # 最後の入力がタッチ（スマホ・タブレット）なら true。画面にタッチ操作ボタンを出す
 var quiet := false  # true の間は通知（トースト）を出さない（デバッグジャンプ用）
@@ -40,11 +40,8 @@ func _ready() -> void:
 	rng.randomize()
 	_setup_input()
 	pad_mode = Input.get_connected_joypads().size() > 0
-	var cfg := ConfigFile.new()
-	if cfg.load(SETTINGS_PATH) == OK:
-		battle_25d = cfg.get_value("battle", "depth", false)
-	if "--depth" in OS.get_cmdline_user_args():
-		battle_25d = true   # 自動テスト・撮影で 2.5D を試す
+	if "--2d" in OS.get_cmdline_user_args():
+		battle_25d = false   # 比較用：従来の 2D バトル
 
 
 func set_battle_25d(on: bool) -> void:
@@ -104,14 +101,14 @@ func key(action: String) -> String:
 func controls_text(battle_only: bool = false) -> String:
 	var t := ""
 	if pad_mode:
-		t = "[b]バトル（ゲームパッド）[/b]\n移動：左スティック／十字キー　通常攻撃：X\n術技：B（＋方向なしで1種、十字キー↑/↓/←→で計4種）\nジャンプ：A　ガード：LB　回避：RT（スティックを倒した方向へ）\nターゲット切替：RB　共鳴秘技：LT（絆ゲージ満タン時）\nオーバーリミッツ：Y（OVLゲージ満タン時）\n秘奥義：オーバーリミッツ中に Y（秘奥義ゲージ100%以上）\n仲間に術技を指示：右スティック ←↑→　メニュー：START"
+		t = "[b]バトル（ゲームパッド）[/b]\n移動：左スティック／十字キー（上下で奥・手前）　通常攻撃：X\n術技：B（＋方向なしで1種、十字キー↑/↓/←→で計4種）\nジャンプ：A　ガード：LB　回避：RT（スティックを倒した方向へ）\nターゲット切替：RB　共鳴秘技：LT（絆ゲージ満タン時）\nオーバーリミッツ：Y（OVLゲージ満タン時）\n秘奥義：オーバーリミッツ中に Y（秘奥義ゲージ100%以上）\n仲間に術技を指示：右スティック ←↑→　メニュー：START"
 		if not battle_only:
 			t += "\n\n[b]マップ[/b]\n移動：左スティック　調べる：A　ダッシュ：LB を押しながら\nスキット：BACK　メニュー：START"
 	else:
-		t = "[b]バトル（キーボード）[/b]\n移動：A/D・←→　通常攻撃：J（Z）\n術技：K（X）＋方向なし/↑/↓/←→で4種\nジャンプ：Space（C）　ガード：L（Shift）　方向キー＋ガードで回避\nターゲット切替：Tab（Q）　共鳴秘技：U（V）（絆ゲージ満タン時）\nオーバーリミッツ：I（B）（OVLゲージ満タン時）\n秘奥義：オーバーリミッツ中に I（秘奥義ゲージ100%以上）\n仲間に術技を指示：1/2/3　メニュー：Esc\n（デバッグ：F9 で敵のHPを残り10に）"
+		t = "[b]バトル（キーボード）[/b]\n移動：WASD・矢印キー（上下で奥・手前）　通常攻撃：J（Z）\n術技：K（X）＋方向なし/↑/↓/←→で4種\nジャンプ：Space（C）　ガード：L（Shift）　方向キー＋ガードで回避\nターゲット切替：Tab（Q）　共鳴秘技：U（V）（絆ゲージ満タン時）\nオーバーリミッツ：I（B）（OVLゲージ満タン時）\n秘奥義：オーバーリミッツ中に I（秘奥義ゲージ100%以上）\n仲間に術技を指示：1/2/3　メニュー：Esc\n（デバッグ：F9 で敵のHPを残り10に）"
 		if not battle_only:
 			t += "\n\n[b]マップ[/b]\n移動：WASD・矢印キー　調べる：Enter（J）　ダッシュ：Shift を押しながら\nスキット：T　メニュー：M"
-	t += "\n\n[b]回避[/b]\n回避ボタン（パッドは RT、キーボードは O か「方向＋ガード」）で、倒している方向へ一瞬で移動して攻撃をかわす（移動中は無敵）。\n2.5D（試作）では上下で奥行きを移動でき、回避も奥・手前に出せる。"
+	t += "\n\n[b]回避[/b]\n回避ボタン（パッドは RT、キーボードは O か「方向＋ガード」）で、倒している方向へ一瞬で移動して攻撃をかわす（移動中は無敵）。\nバトルは奥行きのある 2.5D。上下で奥・手前へ移動でき、回避も奥・手前に出せる。"
 	t += "\n\n[b]ボスの大技[/b]\nボスが大技を構えると、仲間が声をかけ、レンの頭上に対処方法のアイコンが出る。\n矢印なら「ジャンプ」、盾なら「ガード」。外側の輪が内側の円に重なる瞬間に攻撃が来る。"
 	t += "\n\n[b]テイルズ流のコツ[/b]\n通常攻撃 → 特技 → 奥義 の順にキャンセルして繋げよう。\n仲間と同じ敵を叩くと「連携」で絆ゲージが一気にたまる。\n秘奥義ゲージは戦闘をまたいで300%までたまる。200%で2人、300%で3人の合体秘奥義になる。"
 	return t
@@ -271,10 +268,15 @@ func should_tutorial(id: String) -> bool:
 	if flags.get("tut_" + id, false) or not DB.Tutorials.DATA.has(id):
 		return false
 	flags["tut_" + id] = true
+	return not is_test_run()
+
+
+# 自動テスト中か（チュートリアルや戦闘中の強制イベントの会話を飛ばす）
+func is_test_run() -> bool:
 	for a in ["--autotest", "--balance", "--shots", "--gallery"]:
 		if a in OS.get_cmdline_user_args():
-			return false
-	return true
+			return true
+	return false
 
 
 func seen_tutorials() -> Array:
@@ -602,6 +604,11 @@ func from_dict(d: Dictionary) -> void:
 	if meal.has("left"):
 		meal["left"] = int(meal["left"])
 	flags = d["flags"]
+	# 絆技・OVLの解放が物語のイベントになる前のセーブ：進み具合から解放済みにする
+	if flags.has("story_f3_boss_post"):
+		flags["link_unlocked"] = true
+	if flags.has("story_f5_boss_post"):
+		flags["ovl_unlocked"] = true
 	counters = d["counters"]
 	bond = d["bond"]
 	seen_skits = d["seen_skits"]
@@ -660,6 +667,9 @@ func debug_setup(target_floor: int, at_boss: bool) -> void:
 				if DB.Skits.DATA[sk].get("floor", 99) == f:
 					seen_skits[sk] = true
 	floor_num = target_floor
+	# 第五層のボス戦の途中で起きるOVL解放イベント
+	if target_floor > 5:
+		_debug_apply_story("f5_ovl")
 	# 成長：想定レベル、SP（レベルアップ＋層クリア報酬）を自動でスキルツリーに振る
 	var lv: int = (EXPECTED_LV_BOSS if at_boss else EXPECTED_LV_START)[target_floor - 1]
 	for m in party:

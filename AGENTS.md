@@ -16,7 +16,8 @@
 タイトル → 序章 → [層の探索マップ ⇄ 戦闘 / 焚火 / ショップ / イベント / メニュー] × 7層 → エンディング
 ```
 
-- 主人公たちがバベルの塔を一層ずつ登るJRPGです。各層は見下ろし型の探索マップ（テイルズ オブ エターニア風）で、敵のシンボルに触れると横スクロールのリアルタイム戦闘（LMBS風）に入ります。
+- 主人公たちがバベルの塔を一層ずつ登るJRPGです。各層は見下ろし型の探索マップ（テイルズ オブ エターニア風）で、敵のシンボルに触れるとリアルタイム戦闘（LMBS風）に入ります。戦闘は奥行きのある **2.5D が正式仕様**です（`Game.battle_25d`。比較用に `--2d` で従来の2Dにできます）。
+- 共鳴秘技（絆ゲージ）は第三層ボス後の物語（フラグ `link_unlocked`）、オーバーリミッツと秘奥義は第五層ボス戦の途中の強制イベント（`f5_ovl`、フラグ `ovl_unlocked`）で解放されます。解放前はゲージ、ボタン、操作表示を出しません。
 - 層の途中で中盤ストーリーが流れて門が開き、最後にボス戦があります。層に入るたびに、その層の間だけ効く「加護」（ローグライク強化）を選びます。
 - 売りは仲間との掛け合いです。本編ストーリー、マップで見るスキット、焚火の会話、戦闘中のショートチャット、ボス大技の予告ボイス（callouts）があります。
 
@@ -75,7 +76,7 @@
 | `skilltree.gd` | スキルツリー | effect は stat / arte / skill |
 | `links.gd` `mystics.gd` `finishers.gd` | 共鳴秘技、秘奥義、ボスのとどめ演出 | |
 | `tutorials.gd` | チュートリアルの本文 | `{attack}` などはボタン名に置き換わる |
-| `depth_attacks.gd` | 2.5D戦闘（試作）用の敵の技 | |
+| `depth_attacks.gd` | 2.5D戦闘用の敵の技（床に予告が出る横一列・縦一列・円） | |
 
 - 話者idは `characters.gd` のキー、表情は `validate.gd` の `EXPRS` にあるもの（`""` `smile` `laugh` `angry` `sad` `cry` `surprise` `serious` `cold` `think` `sweat` `blush` `blank`）だけが使えます。
 - 会話の演出命令は `scripts/ui/dialogue.gd` が処理します：`@title_card` `@bg` `@cg`（スチル）`@join` `@leave` `@title` `@flag` `@unflag` `@buff` `@item` `@recipe` `@shake` `@flash` `@sfx` `@clear` `@caption`。
@@ -114,6 +115,7 @@ cd C:\Users\endop\Documents\Godot\tales_of_babel
 | `--shots` `--fieldtest` | スクリーンショットを撮る（ヘッドレスではなく画面ありで実行） | 目で確認 |
 | `--uitest` | ゲームパッドだけで店を開き、カーソル移動・購入・Bで退店できるか（画面ありで実行） | 購入後もカーソルが残り、Bで map に戻る |
 | `--touchtest` | タッチだけでマップ移動、調べる、戦闘の攻撃、ポーズができるか（画面ありで実行） | 各行が true / shop |
+| `--ovltest` | 絆・OVLの解放前は出ないこと、第五層ボス戦の途中でOVL解放イベントが流れること（画面ありで実行） | 最後に `ovl_unlocked=true` |
 
 - `--headless` で起動したときの終了時の `ObjectDB instances leaked` / `resources still in use` の警告は、以前から出ているもので問題ありません。
 - GDScript の型推論には注意してください。`var x := 辞書["key"]` のように型が決まらない書き方はエラーになります。`var x: float = 辞書["key"]` のように型を書いてください。

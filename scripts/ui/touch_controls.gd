@@ -59,7 +59,15 @@ func _current_mode() -> String:
 	return ""
 
 
+var layout_sig := ""
+
+
+func _unlock_sig() -> String:
+	return "%s%s" % [Game.flags.get("link_unlocked", false), Game.flags.get("ovl_unlocked", false)]
+
+
 func _layout(m: String) -> void:
+	layout_sig = _unlock_sig()
 	var v := _view()
 	var R := v.x
 	var B := v.y
@@ -76,8 +84,10 @@ func _layout(m: String) -> void:
 			buttons.append(_btn("guard", "ガード", Vector2(R - 250, B - 210), 50))
 			buttons.append(_btn("dodge", "回避", Vector2(R - 375, B - 70), 42))
 			buttons.append(_btn("target", "狙う", Vector2(R - 60, B - 380), 36))
-			buttons.append(_btn("link", "秘技", Vector2(R - 150, B - 400), 36))
-			buttons.append(_btn("overlimit", "OVL", Vector2(R - 240, B - 380), 36))
+			if Game.flags.get("link_unlocked", false):
+				buttons.append(_btn("link", "秘技", Vector2(R - 150, B - 400), 36))
+			if Game.flags.get("ovl_unlocked", false):
+				buttons.append(_btn("overlimit", "OVL", Vector2(R - 240, B - 380), 36))
 			buttons.append(_btn("pause", "Ⅱ", Vector2(R - 300, 46), 32))
 		"dialogue":
 			buttons.append(_btn("pause", "スキップ", Vector2(R - 70, 50), 38))
@@ -95,6 +105,9 @@ func _process(_delta: float) -> void:
 		_layout(mode)
 	elif mode != "" and buttons.size() > 0 and buttons[0]["pos"].x > _view().x:
 		_layout(mode)  # 画面の向きや大きさが変わった
+	elif mode == "battle" and _unlock_sig() != layout_sig:
+		_release_all()
+		_layout(mode)  # 戦闘中に絆技やOVLが解放された
 	canvas.queue_redraw()
 
 
