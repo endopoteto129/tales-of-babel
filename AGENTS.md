@@ -80,6 +80,10 @@
 - 話者idは `characters.gd` のキー、表情は `validate.gd` の `EXPRS` にあるもの（`""` `smile` `laugh` `angry` `sad` `cry` `surprise` `serious` `cold` `think` `sweat` `blush` `blank`）だけが使えます。
 - 会話の演出命令は `scripts/ui/dialogue.gd` が処理します：`@title_card` `@bg` `@cg`（スチル）`@join` `@leave` `@title` `@flag` `@unflag` `@buff` `@item` `@recipe` `@shake` `@flash` `@sfx` `@clear` `@caption`。
 - データを足したら `--validate-only`（6章）で、話者や参照先の間違いがないか確かめてください。
+- **シナリオ台本（Excel）**：プロジェクト直下の `シナリオ台本.xlsx` は、本編・スキット・焚火・戦闘チャット・イベントの台詞を1行ずつ並べた表で、ユキさんが直接書き換えます。
+  - 台本 → ゲーム：`python art_src/scenario/import_scenario.py`（または `シナリオを反映.bat`）。`data/story.gd` などの `"lines"` の中身だけを書き換えます。`--check` を付けると確認だけします。
+  - ゲーム → 台本：`python art_src/scenario/export_scenario.py`。**台本の未反映の書き換えは消えるので、必ず先に import してから** export してください。
+  - 台詞をコードで足したり直したりしたときは、import → コードを編集 → export の順にして、台本とゲームをそろえてください。
 
 ## 5. 探索マップ（`scripts/screens/map.gd`）
 
